@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Activity, Database, Shield, Dna, BarChart3, FileText } from "lucide-react";
+import { Activity, Database, Shield, Dna, BarChart3, GitCompare } from "lucide-react";
 import PipelineOverview from "@/components/pipeline/PipelineOverview";
 import ProteinSelection from "@/components/pipeline/ProteinSelection";
 import LigandManagement from "@/components/pipeline/LigandManagement";
 import ADMETScreening from "@/components/pipeline/ADMETScreening";
 import DockingAnalysis from "@/components/pipeline/DockingAnalysis";
 import ResultsDashboard from "@/components/pipeline/ResultsDashboard";
+import { CompoundComparison } from "@/components/pipeline/CompoundComparison";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -33,7 +34,7 @@ const Index = () => {
       <main className="container mx-auto px-4 py-6">
         <Card className="shadow-elevated">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-6 gap-2 bg-muted p-2">
+            <TabsList className="grid w-full grid-cols-7 gap-2 bg-muted p-2">
               <TabsTrigger value="overview" className="flex items-center gap-2">
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Overview</span>
@@ -54,11 +55,15 @@ const Index = () => {
                 <Activity className="h-4 w-4" />
                 <span className="hidden sm:inline">Docking</span>
               </TabsTrigger>
-              <TabsTrigger value="results" className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Results</span>
-              </TabsTrigger>
-            </TabsList>
+            <TabsTrigger value="results" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Results</span>
+            </TabsTrigger>
+            <TabsTrigger value="comparison" className="flex items-center gap-2">
+              <GitCompare className="h-4 w-4" />
+              <span className="hidden sm:inline">Compare</span>
+            </TabsTrigger>
+          </TabsList>
 
             <div className="p-6">
               <TabsContent value="overview" className="mt-0">
@@ -83,6 +88,10 @@ const Index = () => {
 
               <TabsContent value="results" className="mt-0">
                 <ResultsDashboard />
+              </TabsContent>
+
+              <TabsContent value="comparison" className="mt-0">
+                <CompoundComparison />
               </TabsContent>
             </div>
           </Tabs>
