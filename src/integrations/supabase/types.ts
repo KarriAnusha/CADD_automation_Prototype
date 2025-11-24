@@ -14,7 +14,253 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admet_results: {
+        Row: {
+          absorption_score: number | null
+          analysis_data: Json | null
+          created_at: string
+          distribution_score: number | null
+          excretion_score: number | null
+          id: string
+          ligand_id: string
+          metabolism_score: number | null
+          overall_score: number | null
+          passed_screening: boolean | null
+          toxicity_score: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          absorption_score?: number | null
+          analysis_data?: Json | null
+          created_at?: string
+          distribution_score?: number | null
+          excretion_score?: number | null
+          id?: string
+          ligand_id: string
+          metabolism_score?: number | null
+          overall_score?: number | null
+          passed_screening?: boolean | null
+          toxicity_score?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          absorption_score?: number | null
+          analysis_data?: Json | null
+          created_at?: string
+          distribution_score?: number | null
+          excretion_score?: number | null
+          id?: string
+          ligand_id?: string
+          metabolism_score?: number | null
+          overall_score?: number | null
+          passed_screening?: boolean | null
+          toxicity_score?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admet_results_ligand_id_fkey"
+            columns: ["ligand_id"]
+            isOneToOne: false
+            referencedRelation: "ligands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      docking_results: {
+        Row: {
+          binding_affinity: number | null
+          created_at: string
+          docking_score: number | null
+          id: string
+          ligand_id: string
+          pose_data: Json | null
+          protein_id: string
+          rmsd: number | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          binding_affinity?: number | null
+          created_at?: string
+          docking_score?: number | null
+          id?: string
+          ligand_id: string
+          pose_data?: Json | null
+          protein_id: string
+          rmsd?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          binding_affinity?: number | null
+          created_at?: string
+          docking_score?: number | null
+          id?: string
+          ligand_id?: string
+          pose_data?: Json | null
+          protein_id?: string
+          rmsd?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "docking_results_ligand_id_fkey"
+            columns: ["ligand_id"]
+            isOneToOne: false
+            referencedRelation: "ligands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "docking_results_protein_id_fkey"
+            columns: ["protein_id"]
+            isOneToOne: false
+            referencedRelation: "proteins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      final_analysis: {
+        Row: {
+          created_at: string
+          diagram_2d_url: string | null
+          docking_result_id: string
+          id: string
+          interaction_analysis: Json | null
+          notes: string | null
+          recommendations: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          diagram_2d_url?: string | null
+          docking_result_id: string
+          id?: string
+          interaction_analysis?: Json | null
+          notes?: string | null
+          recommendations?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          diagram_2d_url?: string | null
+          docking_result_id?: string
+          id?: string
+          interaction_analysis?: Json | null
+          notes?: string | null
+          recommendations?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "final_analysis_docking_result_id_fkey"
+            columns: ["docking_result_id"]
+            isOneToOne: false
+            referencedRelation: "docking_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ligands: {
+        Row: {
+          created_at: string
+          id: string
+          inchi: string | null
+          molecular_formula: string | null
+          molecular_weight: number | null
+          name: string
+          pubchem_cid: string
+          selected: boolean | null
+          smiles: string | null
+          structure_data: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inchi?: string | null
+          molecular_formula?: string | null
+          molecular_weight?: number | null
+          name: string
+          pubchem_cid: string
+          selected?: boolean | null
+          smiles?: string | null
+          structure_data?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inchi?: string | null
+          molecular_formula?: string | null
+          molecular_weight?: number | null
+          name?: string
+          pubchem_cid?: string
+          selected?: boolean | null
+          smiles?: string | null
+          structure_data?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      proteins: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          method: string | null
+          name: string
+          organism: string | null
+          pdb_id: string
+          resolution: number | null
+          selected: boolean | null
+          structure_data: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          method?: string | null
+          name: string
+          organism?: string | null
+          pdb_id: string
+          resolution?: number | null
+          selected?: boolean | null
+          structure_data?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          method?: string | null
+          name?: string
+          organism?: string | null
+          pdb_id?: string
+          resolution?: number | null
+          selected?: boolean | null
+          structure_data?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
