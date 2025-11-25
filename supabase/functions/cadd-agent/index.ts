@@ -67,7 +67,9 @@ const tools = [
         properties: {
           pubchem_cid: { type: "string", description: "PubChem CID of the compound" },
           name: { type: "string", description: "Name of the compound" },
-          smiles: { type: "string", description: "SMILES string of the compound" }
+          smiles: { type: "string", description: "SMILES string of the compound" },
+          molecular_weight: { type: "number", description: "Molecular weight" },
+          molecular_formula: { type: "string", description: "Molecular formula" }
         },
         required: ["pubchem_cid", "name"]
       }
@@ -149,14 +151,66 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
 
   switch (toolName) {
     case "search_proteins":
-      return {
-        results: [
-          { pdb_id: "1ATP", name: "Protein Kinase", description: "Human protein kinase structure", resolution: 2.1, organism: "Homo sapiens" },
-          { pdb_id: "3ERT", name: "Estrogen Receptor", description: "Estrogen receptor alpha", resolution: 1.9, organism: "Homo sapiens" },
-          { pdb_id: "5HG9", name: "EGFR Kinase", description: "Epidermal growth factor receptor", resolution: 2.3, organism: "Homo sapiens" }
-        ],
-        message: `Found 3 proteins matching "${args.query}". These are simulated results.`
-      };
+      try {
+        // Search RCSB PDB using their search API
+        const searchQuery = {
+          query: {
+            type: "terminal",
+            service: "text",
+            parameters: {
+              value: args.query
+            }
+          },
+          return_type: "entry",
+          request_options: {
+            results_content_type: ["experimental"],
+            return_all_hits: false
+          }
+        };
+
+        const searchResponse = await fetch('https://search.rcsb.org/rcsbsearch/v2/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(searchQuery)
+        });
+
+        if (!searchResponse.ok) {
+          throw new Error('PDB search failed');
+        }
+
+        const searchData = await searchResponse.json();
+        const pdbIds = searchData.result_set?.slice(0, args.limit || 5).map((r: any) => r.identifier) || [];
+
+        // Fetch details for each PDB ID
+        const results = await Promise.all(
+          pdbIds.map(async (pdbId: string) => {
+            const detailResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId}`);
+            if (!detailResponse.ok) return null;
+            
+            const detail = await detailResponse.json();
+            return {
+              pdb_id: pdbId.toUpperCase(),
+              name: detail.struct?.title || pdbId,
+              description: detail.struct?.pdbx_descriptor || '',
+              resolution: detail.rcsb_entry_info?.resolution_combined?.[0] || null,
+              organism: detail.rcsb_entry_container_identifiers?.source_organism_names?.[0] || 'Unknown',
+              method: detail.exptl?.[0]?.method || 'X-RAY DIFFRACTION'
+            };
+          })
+        );
+
+        const validResults = results.filter(r => r !== null);
+        return {
+          results: validResults,
+          message: `Found ${validResults.length} proteins from RCSB PDB matching "${args.query}".`
+        };
+      } catch (error) {
+        console.error('PDB API error:', error);
+        return {
+          results: [],
+          message: `Error searching PDB: ${error instanceof Error ? error.message : 'Unknown error'}`
+        };
+      }
 
     case "add_protein":
       const { data: protein, error: proteinError } = await supabase
@@ -178,14 +232,63 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
       return { success: true, protein_id: protein.id, message: `Protein ${args.name} (${args.pdb_id}) added successfully.` };
 
     case "search_ligands":
-      return {
-        results: [
-          { pubchem_cid: "2244", name: "Aspirin", smiles: "CC(=O)Oc1ccccc1C(=O)O", molecular_weight: 180.16 },
-          { pubchem_cid: "5330", name: "Ibuprofen", smiles: "CC(C)Cc1ccc(cc1)C(C)C(=O)O", molecular_weight: 206.28 },
-          { pubchem_cid: "2519", name: "Caffeine", smiles: "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", molecular_weight: 194.19 }
-        ],
-        message: `Found 3 ligands matching "${args.query}". These are simulated results.`
-      };
+      try {
+        // Search PubChem by name
+        const nameResponse = await fetch(
+          `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(args.query)}/cids/JSON?list_return=listkey`
+        );
+        
+        let cids: string[] = [];
+        
+        if (nameResponse.ok) {
+          const nameData = await nameResponse.json();
+          const listKey = nameData.IdentifierList?.ListKey;
+          
+          if (listKey) {
+            const listResponse = await fetch(
+              `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/listkey/${listKey}/cids/JSON`
+            );
+            const listData = await listResponse.json();
+            cids = listData.IdentifierList?.CID?.slice(0, args.limit || 10) || [];
+          }
+        }
+
+        if (cids.length === 0) {
+          return {
+            results: [],
+            message: `No compounds found in PubChem for "${args.query}". Try a different search term.`
+          };
+        }
+
+        // Fetch properties for found CIDs
+        const propsResponse = await fetch(
+          `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cids.join(',')}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON`
+        );
+
+        if (!propsResponse.ok) {
+          throw new Error('Failed to fetch compound properties');
+        }
+
+        const propsData = await propsResponse.json();
+        const results = propsData.PropertyTable?.Properties?.map((prop: any) => ({
+          pubchem_cid: prop.CID.toString(),
+          name: prop.IUPACName || `Compound ${prop.CID}`,
+          smiles: prop.CanonicalSMILES || null,
+          molecular_weight: prop.MolecularWeight || null,
+          molecular_formula: prop.MolecularFormula || null
+        })) || [];
+
+        return {
+          results,
+          message: `Found ${results.length} compounds from PubChem matching "${args.query}".`
+        };
+      } catch (error) {
+        console.error('PubChem API error:', error);
+        return {
+          results: [],
+          message: `Error searching PubChem: ${error instanceof Error ? error.message : 'Unknown error'}`
+        };
+      }
 
     case "add_ligand":
       const { data: ligand, error: ligandError } = await supabase
@@ -196,14 +299,14 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
           name: args.name,
           smiles: args.smiles || null,
           selected: true,
-          molecular_weight: 250.0,
-          molecular_formula: "C15H12O2"
+          molecular_weight: args.molecular_weight || null,
+          molecular_formula: args.molecular_formula || null
         })
         .select()
         .single();
 
       if (ligandError) throw ligandError;
-      return { success: true, ligand_id: ligand.id, message: `Ligand ${args.name} added successfully.` };
+      return { success: true, ligand_id: ligand.id, message: `Ligand ${args.name} added to library.` };
 
     case "run_admet_screening":
       const { data: ligandsToScreen } = await supabase
