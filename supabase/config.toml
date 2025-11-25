@@ -1,1 +1,7 @@
 project_id = "xmywkuurcmxjfpfzgtnl"
+
+[functions.hello]
+verify_jwt = false
+
+[functions.cadd-agent]
+verify_jwt = true
