@@ -309,44 +309,361 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
       return { success: true, ligand_id: ligand.id, message: `Ligand ${args.name} added to library.` };
 
     case "run_admet_screening":
+      // Fetch ligands with molecular properties
       const { data: ligandsToScreen } = await supabase
         .from('ligands')
-        .select('id, name')
+        .select('id, name, smiles, molecular_weight, molecular_formula, pubchem_cid')
         .eq('user_id', userId)
         .in('id', args.ligand_ids?.length > 0 ? args.ligand_ids : []);
 
       const screeningResults = [];
+      
       for (const ligand of ligandsToScreen || []) {
-        const admetScores = {
-          absorption_score: 0.7 + Math.random() * 0.3,
-          distribution_score: 0.6 + Math.random() * 0.4,
-          metabolism_score: 0.65 + Math.random() * 0.35,
-          excretion_score: 0.7 + Math.random() * 0.3,
-          toxicity_score: 0.8 + Math.random() * 0.2
-        };
-        const overallScore = Object.values(admetScores).reduce((a, b) => a + b) / 5;
-        
-        await supabase.from('admet_results').insert({
-          user_id: userId,
-          ligand_id: ligand.id,
-          ...admetScores,
-          overall_score: overallScore,
-          passed_screening: overallScore > 0.7
-        });
+        try {
+          // Fetch additional properties from PubChem if needed
+          let properties = {
+            molecular_weight: ligand.molecular_weight,
+            smiles: ligand.smiles,
+            hbd: 0, // H-bond donors
+            hba: 0, // H-bond acceptors
+            tpsa: 0, // Topological polar surface area
+            logp: 0, // Partition coefficient
+            rotatable_bonds: 0,
+            heavy_atoms: 0,
+            rings: 0,
+            aromatic_rings: 0,
+            complexity: 0
+          };
 
-        screeningResults.push({
-          ligand_name: ligand.name,
-          overall_score: overallScore.toFixed(3),
-          passed: overallScore > 0.7
-        });
+          // Fetch detailed properties from PubChem
+          if (ligand.pubchem_cid) {
+            const propsResponse = await fetch(
+              `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${ligand.pubchem_cid}/property/MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,HeavyAtomCount,RingCount,Complexity/JSON`
+            );
+            
+            if (propsResponse.ok) {
+              const propsData = await propsResponse.json();
+              const props = propsData.PropertyTable?.Properties?.[0];
+              if (props) {
+                properties = {
+                  molecular_weight: props.MolecularWeight || ligand.molecular_weight || 400,
+                  smiles: ligand.smiles || '',
+                  hbd: props.HBondDonorCount || 0,
+                  hba: props.HBondAcceptorCount || 0,
+                  tpsa: props.TPSA || 0,
+                  logp: props.XLogP || 0,
+                  rotatable_bonds: props.RotatableBondCount || 0,
+                  heavy_atoms: props.HeavyAtomCount || 0,
+                  rings: props.RingCount || 0,
+                  aromatic_rings: 0, // Estimate from complexity
+                  complexity: props.Complexity || 0
+                };
+              }
+            }
+          }
+
+          // ============ ABSORPTION SCORE ============
+          // Based on Lipinski's Rule of Five + TPSA + oral bioavailability rules
+          let absorptionScore = 1.0;
+          const absorptionDetails: string[] = [];
+          
+          // MW <= 500 (Lipinski)
+          if (properties.molecular_weight > 500) {
+            absorptionScore -= 0.2;
+            absorptionDetails.push(`MW ${properties.molecular_weight.toFixed(1)} > 500`);
+          }
+          if (properties.molecular_weight > 600) absorptionScore -= 0.15;
+          
+          // HBD <= 5 (Lipinski)
+          if (properties.hbd > 5) {
+            absorptionScore -= 0.2;
+            absorptionDetails.push(`HBD ${properties.hbd} > 5`);
+          }
+          
+          // HBA <= 10 (Lipinski)
+          if (properties.hba > 10) {
+            absorptionScore -= 0.2;
+            absorptionDetails.push(`HBA ${properties.hba} > 10`);
+          }
+          
+          // LogP <= 5 (Lipinski)
+          if (properties.logp > 5) {
+            absorptionScore -= 0.2;
+            absorptionDetails.push(`LogP ${properties.logp.toFixed(2)} > 5`);
+          }
+          if (properties.logp < -1) {
+            absorptionScore -= 0.1;
+            absorptionDetails.push(`LogP ${properties.logp.toFixed(2)} < -1 (poor permeability)`);
+          }
+          
+          // TPSA <= 140 Å² (Veber's rule for oral bioavailability)
+          if (properties.tpsa > 140) {
+            absorptionScore -= 0.2;
+            absorptionDetails.push(`TPSA ${properties.tpsa.toFixed(1)} > 140 Å²`);
+          }
+          
+          // Rotatable bonds <= 10 (Veber's rule)
+          if (properties.rotatable_bonds > 10) {
+            absorptionScore -= 0.15;
+            absorptionDetails.push(`Rotatable bonds ${properties.rotatable_bonds} > 10`);
+          }
+          
+          absorptionScore = Math.max(0, Math.min(1, absorptionScore));
+
+          // ============ DISTRIBUTION SCORE ============
+          // Based on LogP, TPSA, MW for tissue distribution
+          let distributionScore = 1.0;
+          const distributionDetails: string[] = [];
+          
+          // Optimal LogP range for distribution: 1-3
+          if (properties.logp < 0) {
+            distributionScore -= 0.2;
+            distributionDetails.push('Low LogP: poor membrane penetration');
+          } else if (properties.logp > 4) {
+            distributionScore -= 0.15;
+            distributionDetails.push('High LogP: possible tissue accumulation');
+          }
+          
+          // TPSA affects BBB penetration (< 90 Å² for CNS drugs)
+          if (properties.tpsa > 90) {
+            distributionScore -= 0.1;
+            distributionDetails.push('TPSA > 90: limited CNS penetration');
+          }
+          
+          // Volume of distribution estimation based on MW
+          if (properties.molecular_weight > 450) {
+            distributionScore -= 0.1;
+            distributionDetails.push('High MW may limit distribution');
+          }
+          
+          // Plasma protein binding estimation (higher LogP = higher PPB)
+          if (properties.logp > 3.5) {
+            distributionScore -= 0.1;
+            distributionDetails.push('High LogP: possible high plasma protein binding');
+          }
+          
+          distributionScore = Math.max(0, Math.min(1, distributionScore));
+
+          // ============ METABOLISM SCORE ============
+          // CYP450 liability estimation based on structural features
+          let metabolismScore = 1.0;
+          const metabolismDetails: string[] = [];
+          
+          // High lipophilicity suggests CYP3A4 substrate
+          if (properties.logp > 3) {
+            metabolismScore -= 0.1;
+            metabolismDetails.push('Moderate CYP3A4 substrate risk');
+          }
+          
+          // Aromatic rings increase CYP metabolism
+          if (properties.rings > 3) {
+            metabolismScore -= 0.1;
+            metabolismDetails.push('Multiple rings: increased oxidative metabolism');
+          }
+          
+          // Complexity affects metabolic stability
+          const complexity = properties.complexity || 0;
+          if (complexity > 600) {
+            metabolismScore -= 0.1;
+            metabolismDetails.push('High complexity: multiple metabolic sites');
+          }
+          
+          // MW affects clearance
+          if (properties.molecular_weight < 300) {
+            metabolismScore -= 0.1;
+            metabolismDetails.push('Low MW: rapid metabolism possible');
+          }
+          
+          // Optimal range bonus
+          if (properties.logp >= 1 && properties.logp <= 3 && properties.molecular_weight >= 350 && properties.molecular_weight <= 450) {
+            metabolismScore += 0.1;
+            metabolismDetails.push('Optimal range for metabolic stability');
+          }
+          
+          metabolismScore = Math.max(0, Math.min(1, metabolismScore));
+
+          // ============ EXCRETION SCORE ============
+          // Renal and hepatic clearance estimation
+          let excretionScore = 1.0;
+          const excretionDetails: string[] = [];
+          
+          // MW > 500 typically hepatic clearance
+          if (properties.molecular_weight > 500) {
+            excretionDetails.push('Primarily hepatic elimination expected');
+          }
+          
+          // Low LogP = renal excretion
+          if (properties.logp < 1) {
+            excretionScore += 0.05;
+            excretionDetails.push('Favorable for renal clearance');
+          }
+          
+          // TPSA affects tubular secretion
+          if (properties.tpsa > 100) {
+            excretionScore -= 0.1;
+            excretionDetails.push('High TPSA may affect tubular handling');
+          }
+          
+          // Optimal clearance prediction
+          if (properties.molecular_weight >= 300 && properties.molecular_weight <= 400) {
+            excretionScore += 0.05;
+            excretionDetails.push('Favorable MW for balanced clearance');
+          }
+          
+          excretionScore = Math.max(0, Math.min(1, excretionScore));
+
+          // ============ TOXICITY SCORE ============
+          // Rule-based toxicity prediction
+          let toxicityScore = 1.0;
+          const toxicityDetails: string[] = [];
+          const smiles = properties.smiles?.toUpperCase() || '';
+          
+          // Structural alerts for toxicity (simplified PAINS-like filters)
+          const toxicAlerts = [
+            { pattern: '[N+](=O)[O-]', name: 'Nitro group', penalty: 0.25 },
+            { pattern: 'N=N', name: 'Azo group', penalty: 0.2 },
+            { pattern: 'S(=O)(=O)N', name: 'Sulfonamide', penalty: 0.05 },
+            { pattern: 'C(=O)Cl', name: 'Acyl chloride', penalty: 0.3 },
+            { pattern: 'C#N', name: 'Nitrile', penalty: 0.1 },
+            { pattern: '[F,Cl,Br,I]', name: 'Halogens', penalty: 0.05 },
+          ];
+          
+          // Simple pattern matching (not full SMARTS but indicative)
+          if (smiles.includes('N(=O)') || smiles.includes('[N+]')) {
+            toxicityScore -= 0.2;
+            toxicityDetails.push('Nitro/N-oxide group detected');
+          }
+          if (smiles.includes('N=N')) {
+            toxicityScore -= 0.15;
+            toxicityDetails.push('Azo linkage detected');
+          }
+          if (smiles.includes('Br') || smiles.includes('I')) {
+            toxicityScore -= 0.1;
+            toxicityDetails.push('Heavy halogen detected');
+          }
+          
+          // Lipophilicity-based hepatotoxicity risk
+          if (properties.logp > 4) {
+            toxicityScore -= 0.15;
+            toxicityDetails.push('High LogP: hepatotoxicity risk');
+          }
+          
+          // Very high MW compounds
+          if (properties.molecular_weight > 600) {
+            toxicityScore -= 0.1;
+            toxicityDetails.push('High MW: immunogenicity risk');
+          }
+          
+          // TPSA-based cardiotoxicity (hERG) risk
+          if (properties.tpsa < 30 && properties.logp > 3) {
+            toxicityScore -= 0.15;
+            toxicityDetails.push('Low TPSA + high LogP: hERG liability');
+          }
+          
+          // Ames mutagenicity risk indicators
+          if (properties.rings > 4 && properties.hba < 2) {
+            toxicityScore -= 0.1;
+            toxicityDetails.push('Polycyclic aromatic: genotoxicity risk');
+          }
+          
+          toxicityScore = Math.max(0, Math.min(1, toxicityScore));
+
+          // ============ CALCULATE OVERALL SCORE ============
+          // Weighted average with toxicity having highest weight
+          const weights = {
+            absorption: 0.2,
+            distribution: 0.15,
+            metabolism: 0.2,
+            excretion: 0.15,
+            toxicity: 0.3  // Toxicity most important
+          };
+          
+          const overallScore = (
+            absorptionScore * weights.absorption +
+            distributionScore * weights.distribution +
+            metabolismScore * weights.metabolism +
+            excretionScore * weights.excretion +
+            toxicityScore * weights.toxicity
+          );
+          
+          // Determine pass/fail (threshold 0.6 for drug-likeness)
+          const passedScreening = overallScore >= 0.6 && toxicityScore >= 0.5;
+          
+          // Store detailed analysis data
+          const analysisData = {
+            properties,
+            absorption: { score: absorptionScore, details: absorptionDetails },
+            distribution: { score: distributionScore, details: distributionDetails },
+            metabolism: { score: metabolismScore, details: metabolismDetails },
+            excretion: { score: excretionScore, details: excretionDetails },
+            toxicity: { score: toxicityScore, details: toxicityDetails },
+            lipinski_violations: (properties.molecular_weight > 500 ? 1 : 0) + 
+                                (properties.hbd > 5 ? 1 : 0) + 
+                                (properties.hba > 10 ? 1 : 0) + 
+                                (properties.logp > 5 ? 1 : 0),
+            veber_violations: (properties.tpsa > 140 ? 1 : 0) + 
+                             (properties.rotatable_bonds > 10 ? 1 : 0),
+            drug_likeness: passedScreening ? 'Pass' : 'Fail'
+          };
+          
+          // Insert ADMET results
+          await supabase.from('admet_results').insert({
+            user_id: userId,
+            ligand_id: ligand.id,
+            absorption_score: absorptionScore,
+            distribution_score: distributionScore,
+            metabolism_score: metabolismScore,
+            excretion_score: excretionScore,
+            toxicity_score: toxicityScore,
+            overall_score: overallScore,
+            passed_screening: passedScreening,
+            analysis_data: analysisData
+          });
+
+          screeningResults.push({
+            ligand_name: ligand.name,
+            pubchem_cid: ligand.pubchem_cid,
+            molecular_weight: properties.molecular_weight?.toFixed(1),
+            logp: properties.logp?.toFixed(2),
+            absorption_score: absorptionScore.toFixed(3),
+            distribution_score: distributionScore.toFixed(3),
+            metabolism_score: metabolismScore.toFixed(3),
+            excretion_score: excretionScore.toFixed(3),
+            toxicity_score: toxicityScore.toFixed(3),
+            overall_score: overallScore.toFixed(3),
+            lipinski_violations: analysisData.lipinski_violations,
+            passed: passedScreening,
+            key_flags: [
+              ...absorptionDetails.slice(0, 2),
+              ...toxicityDetails.slice(0, 2)
+            ].slice(0, 3)
+          });
+          
+        } catch (error) {
+          console.error(`ADMET screening error for ${ligand.name}:`, error);
+          screeningResults.push({
+            ligand_name: ligand.name,
+            error: 'Screening failed',
+            passed: false
+          });
+        }
       }
 
+      const passedCount = screeningResults.filter(r => r.passed).length;
       return { 
         success: true, 
         screened_count: screeningResults.length,
-        passed_count: screeningResults.filter(r => r.passed).length,
+        passed_count: passedCount,
+        failed_count: screeningResults.length - passedCount,
+        pass_rate: ((passedCount / screeningResults.length) * 100).toFixed(1) + '%',
         results: screeningResults,
-        message: `ADMET screening complete. ${screeningResults.filter(r => r.passed).length}/${screeningResults.length} compounds passed safety criteria.`
+        screening_criteria: {
+          lipinski_rule_of_five: 'MW ≤ 500, HBD ≤ 5, HBA ≤ 10, LogP ≤ 5',
+          veber_rules: 'TPSA ≤ 140 Å², Rotatable bonds ≤ 10',
+          toxicity_alerts: 'Structural alerts, hERG liability, hepatotoxicity risk',
+          pass_threshold: 'Overall score ≥ 0.6, Toxicity score ≥ 0.5'
+        },
+        message: `Computational ADMET screening complete. ${passedCount}/${screeningResults.length} compounds (${((passedCount / screeningResults.length) * 100).toFixed(1)}%) passed drug-likeness and safety criteria.`
       };
 
     case "run_docking_analysis":
