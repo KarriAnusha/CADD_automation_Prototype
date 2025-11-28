@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Atom, Network } from "lucide-react";
+import { Loader2, Atom, Network, ArrowRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import InteractionDiagram2D from "./InteractionDiagram2D";
 import SchematicDiagram from "./SchematicDiagram";
@@ -23,7 +23,11 @@ interface DockingCompound {
   dockingResultId: string;
 }
 
-const InteractionDiagrams = () => {
+interface InteractionDiagramsProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const InteractionDiagrams = ({ onNavigate }: InteractionDiagramsProps) => {
   const [compounds, setCompounds] = useState<DockingCompound[]>([]);
   const [selectedCompound, setSelectedCompound] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -213,6 +217,16 @@ const InteractionDiagrams = () => {
             ))}
           </div>
         </Card>
+      )}
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("batch")} className="gap-2">
+            Next: Batch Processing
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
       )}
     </div>
   );

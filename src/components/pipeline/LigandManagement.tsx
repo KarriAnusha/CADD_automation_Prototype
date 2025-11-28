@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus, FileSpreadsheet, Database } from "lucide-react";
+import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus, FileSpreadsheet, Database, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -23,7 +23,11 @@ interface Ligand {
 
 type DatabaseSource = "all" | "pubchem" | "chembl" | "drugbank" | "kegg";
 
-const LigandManagement = () => {
+interface LigandManagementProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const LigandManagement = ({ onNavigate }: LigandManagementProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Ligand[]>([]);
   const [savedLigands, setSavedLigands] = useState<Ligand[]>([]);
@@ -606,6 +610,16 @@ const LigandManagement = () => {
           </p>
         </div>
       </Card>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("admet")} className="gap-2">
+            Next: ADMET Screening
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
