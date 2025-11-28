@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Activity, Database, Shield, Dna, BarChart3, GitCompare, Sparkles } from "lucide-react";
+import { Activity, Database, Shield, Dna, BarChart3, GitCompare, Sparkles, Atom } from "lucide-react";
 import PipelineOverview from "@/components/pipeline/PipelineOverview";
 import ProteinSelection from "@/components/pipeline/ProteinSelection";
 import LigandManagement from "@/components/pipeline/LigandManagement";
@@ -10,6 +10,7 @@ import DockingAnalysis from "@/components/pipeline/DockingAnalysis";
 import ResultsDashboard from "@/components/pipeline/ResultsDashboard";
 import { CompoundComparison } from "@/components/pipeline/CompoundComparison";
 import { AgentChat } from "@/components/agent/AgentChat";
+import InteractionDiagrams from "@/components/pipeline/InteractionDiagrams";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -35,40 +36,44 @@ const Index = () => {
       <main className="container mx-auto px-4 py-6">
         <Card className="shadow-elevated">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-8 gap-2 bg-muted p-2">
-              <TabsTrigger value="agent" className="flex items-center gap-2 bg-gradient-to-r from-primary/20 to-secondary/20">
+            <TabsList className="grid w-full grid-cols-9 gap-1 bg-muted p-2">
+              <TabsTrigger value="agent" className="flex items-center gap-1.5 bg-gradient-to-r from-primary/20 to-secondary/20 text-xs">
                 <Sparkles className="h-4 w-4" />
-                <span className="hidden sm:inline">AI Agent</span>
+                <span className="hidden lg:inline">AI Agent</span>
               </TabsTrigger>
-              <TabsTrigger value="overview" className="flex items-center gap-2">
+              <TabsTrigger value="overview" className="flex items-center gap-1.5 text-xs">
                 <Activity className="h-4 w-4" />
-                <span className="hidden sm:inline">Overview</span>
+                <span className="hidden lg:inline">Overview</span>
               </TabsTrigger>
-              <TabsTrigger value="proteins" className="flex items-center gap-2">
+              <TabsTrigger value="proteins" className="flex items-center gap-1.5 text-xs">
                 <Database className="h-4 w-4" />
-                <span className="hidden sm:inline">Proteins</span>
+                <span className="hidden lg:inline">Proteins</span>
               </TabsTrigger>
-              <TabsTrigger value="ligands" className="flex items-center gap-2">
+              <TabsTrigger value="ligands" className="flex items-center gap-1.5 text-xs">
                 <Dna className="h-4 w-4" />
-                <span className="hidden sm:inline">Ligands</span>
+                <span className="hidden lg:inline">Ligands</span>
               </TabsTrigger>
-              <TabsTrigger value="admet" className="flex items-center gap-2">
+              <TabsTrigger value="admet" className="flex items-center gap-1.5 text-xs">
                 <Shield className="h-4 w-4" />
-                <span className="hidden sm:inline">ADMET</span>
+                <span className="hidden lg:inline">ADMET</span>
               </TabsTrigger>
-              <TabsTrigger value="docking" className="flex items-center gap-2">
+              <TabsTrigger value="docking" className="flex items-center gap-1.5 text-xs">
                 <Activity className="h-4 w-4" />
-                <span className="hidden sm:inline">Docking</span>
+                <span className="hidden lg:inline">Docking</span>
               </TabsTrigger>
-            <TabsTrigger value="results" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Results</span>
-            </TabsTrigger>
-            <TabsTrigger value="comparison" className="flex items-center gap-2">
-              <GitCompare className="h-4 w-4" />
-              <span className="hidden sm:inline">Compare</span>
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger value="diagrams" className="flex items-center gap-1.5 text-xs">
+                <Atom className="h-4 w-4" />
+                <span className="hidden lg:inline">2D Diagrams</span>
+              </TabsTrigger>
+              <TabsTrigger value="results" className="flex items-center gap-1.5 text-xs">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden lg:inline">Results</span>
+              </TabsTrigger>
+              <TabsTrigger value="comparison" className="flex items-center gap-1.5 text-xs">
+                <GitCompare className="h-4 w-4" />
+                <span className="hidden lg:inline">Compare</span>
+              </TabsTrigger>
+            </TabsList>
 
             <div className="p-6">
               <TabsContent value="agent" className="mt-0">
@@ -93,6 +98,10 @@ const Index = () => {
 
               <TabsContent value="docking" className="mt-0">
                 <DockingAnalysis />
+              </TabsContent>
+
+              <TabsContent value="diagrams" className="mt-0">
+                <InteractionDiagrams />
               </TabsContent>
 
               <TabsContent value="results" className="mt-0">
