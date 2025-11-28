@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus } from "lucide-react";
+import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -172,6 +172,58 @@ const LigandManagement = () => {
     fetchSavedLigands();
   };
 
+  const handleExportCSV = () => {
+    const selectedLigands = savedLigands.filter((l) => l.selected);
+    
+    if (selectedLigands.length === 0) {
+      toast({
+        title: "No Ligands Selected",
+        description: "Please select ligands to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Create CSV content
+    const headers = ["PubChem_CID", "Name", "Molecular_Formula", "Molecular_Weight", "SMILES", "InChI"];
+    const csvRows = [headers.join(",")];
+    
+    selectedLigands.forEach((ligand) => {
+      const row = [
+        ligand.pubchem_cid,
+        `"${(ligand.name || "").replace(/"/g, '""')}"`,
+        ligand.molecular_formula || "",
+        ligand.molecular_weight?.toFixed(4) || "",
+        `"${(ligand.smiles || "").replace(/"/g, '""')}"`,
+        `"${(ligand.inchi || "").replace(/"/g, '""')}"`,
+      ];
+      csvRows.push(row.join(","));
+    });
+
+    const csvContent = csvRows.join("\n");
+    
+    // Store CSV in localStorage for ADMET screening to access
+    localStorage.setItem("selected_ligands_csv", csvContent);
+    localStorage.setItem("selected_ligands_count", selectedLigands.length.toString());
+    localStorage.setItem("selected_ligands_timestamp", new Date().toISOString());
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `selected_ligands_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "CSV Exported",
+      description: `Exported ${selectedLigands.length} ligands. CSV ready for ADMET analysis.`,
+    });
+  };
+
   const handleBulkImport = async () => {
     setIsImporting(true);
     setImportProgress(0);
@@ -262,7 +314,7 @@ const LigandManagement = () => {
       </div>
 
       {/* Library Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="bg-card p-4 shadow-card">
           <div className="space-y-2">
             <p className="text-sm font-medium text-muted-foreground">Total Ligands</p>
@@ -280,6 +332,25 @@ const LigandManagement = () => {
               {savedLigands.filter((l) => l.selected).length}
             </p>
             <Badge variant="secondary">For Screening</Badge>
+          </div>
+        </Card>
+
+        {/* Export CSV Card */}
+        <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 p-4 shadow-card">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              <p className="text-sm font-medium text-foreground">Export for ADMET</p>
+            </div>
+            <Button 
+              onClick={handleExportCSV} 
+              disabled={savedLigands.filter((l) => l.selected).length === 0}
+              className="w-full gap-2"
+              size="sm"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
           </div>
         </Card>
 
