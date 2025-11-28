@@ -157,22 +157,27 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch statistics
+      // Fetch statistics with unique ligand counts to avoid duplicates from multiple runs
       const [proteinsRes, ligandsRes, admetPassedRes, admetFailedRes, dockingRes, bestDockingRes] = await Promise.all([
         supabase.from("proteins").select("id", { count: "exact", head: true }),
         supabase.from("ligands").select("id", { count: "exact", head: true }),
-        supabase.from("admet_results").select("id", { count: "exact", head: true }).eq("passed_screening", true),
-        supabase.from("admet_results").select("id", { count: "exact", head: true }).eq("passed_screening", false),
-        supabase.from("docking_results").select("id", { count: "exact", head: true }).eq("status", "completed"),
+        supabase.from("admet_results").select("ligand_id").eq("passed_screening", true),
+        supabase.from("admet_results").select("ligand_id").eq("passed_screening", false),
+        supabase.from("docking_results").select("ligand_id").eq("status", "completed"),
         supabase.from("docking_results").select("docking_score").order("docking_score", { ascending: true }).limit(1).maybeSingle(),
       ]);
+
+      // Count unique ligands (deduplicate multiple runs)
+      const uniqueAdmetPassed = new Set(admetPassedRes.data?.map(r => r.ligand_id) || []).size;
+      const uniqueAdmetFailed = new Set(admetFailedRes.data?.map(r => r.ligand_id) || []).size;
+      const uniqueDocked = new Set(dockingRes.data?.map(r => r.ligand_id) || []).size;
 
       setStats({
         proteinsCount: proteinsRes.count || 0,
         ligandsCount: ligandsRes.count || 0,
-        safeCompounds: admetPassedRes.count || 0,
-        failedCompounds: admetFailedRes.count || 0,
-        dockingCompleted: dockingRes.count || 0,
+        safeCompounds: uniqueAdmetPassed,
+        failedCompounds: uniqueAdmetFailed,
+        dockingCompleted: uniqueDocked,
         bestBinding: bestDockingRes.data?.docking_score || 0,
       });
 
