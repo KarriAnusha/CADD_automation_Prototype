@@ -14,6 +14,7 @@ interface SchematicDiagramProps {
   pdbId: string;
   bindingAffinity: number;
   dockingScore: number;
+  dockingResultId?: string;
 }
 
 // Simple 2D structure visualization based on molecular formula
@@ -108,6 +109,7 @@ const SchematicDiagram = ({
   pdbId,
   bindingAffinity,
   dockingScore,
+  dockingResultId,
 }: SchematicDiagramProps) => {
   const [zoom, setZoom] = useState(1);
   
