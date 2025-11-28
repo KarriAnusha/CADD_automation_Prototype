@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.cadd-agent]
 verify_jwt = true
+
+[functions.generate-admet-radar]
+verify_jwt = false
