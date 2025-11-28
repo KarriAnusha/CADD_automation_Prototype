@@ -16,7 +16,7 @@ export const AgentChat = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
-      content: "👋 Hello! I'm your CADD-SBDD AI agent. I can help you automate the entire drug discovery pipeline:\n\n• Search and add proteins from PDB\n• Find ligands in PubChem\n• Run ADMET safety screening\n• Perform molecular docking\n• Analyze results and generate reports\n\nTry asking me: \"Run a complete kinase inhibitor analysis\" or \"Find EGFR inhibitors and dock them\""
+      content: "👋 Hello! I'm your CADD-SBDD AI agent. I can help you automate the entire drug discovery pipeline:\n\n• Search and add proteins from PDB\n• Find ligands from PubChem or Kaggle datasets\n• Import large ligand libraries from Kaggle\n• Run ADMET safety screening\n• Perform molecular docking\n• Analyze results and generate reports\n\nTry asking me: \"Find SARS-CoV-2 3CLpro inhibitors\" or \"Search Kaggle for drug compound datasets\""
     }
   ]);
   const [input, setInput] = useState("");
@@ -79,10 +79,10 @@ export const AgentChat = () => {
   };
 
   const quickActions = [
+    "Find SARS-CoV-2 3CLpro inhibitors - search Kaggle first, then PubChem",
+    "Search Kaggle for COVID-19 drug datasets",
     "Run complete EGFR inhibitor analysis",
-    "Find kinase proteins and screen compounds",
-    "Analyze top 5 docking results",
-    "Search for COVID-19 protease inhibitors"
+    "Analyze top docking results"
   ];
 
   return (
