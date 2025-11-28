@@ -20,6 +20,7 @@ interface DockingCompound {
   molecularWeight?: number;
   bindingAffinity: number;
   dockingScore: number;
+  dockingResultId: string;
 }
 
 const InteractionDiagrams = () => {
@@ -71,6 +72,7 @@ const InteractionDiagrams = () => {
         molecularWeight: result.ligands?.molecular_weight,
         bindingAffinity: result.binding_affinity || 0,
         dockingScore: result.docking_score || 0,
+        dockingResultId: result.id,
       })) || [];
 
       setCompounds(mappedCompounds);
@@ -155,6 +157,7 @@ const InteractionDiagrams = () => {
               proteinName={currentCompound.proteinName}
               pdbId={currentCompound.pdbId}
               bindingAffinity={currentCompound.bindingAffinity}
+              dockingResultId={currentCompound.dockingResultId}
             />
           </TabsContent>
 
@@ -169,6 +172,7 @@ const InteractionDiagrams = () => {
               pdbId={currentCompound.pdbId}
               bindingAffinity={currentCompound.bindingAffinity}
               dockingScore={currentCompound.dockingScore}
+              dockingResultId={currentCompound.dockingResultId}
             />
           </TabsContent>
         </Tabs>

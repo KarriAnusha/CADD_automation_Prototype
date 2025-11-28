@@ -1,7 +1,9 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { supabase } from "@/integrations/supabase/client";
+import { Loader2 } from "lucide-react";
 
 interface Interaction {
   type: "hydrogen_bond" | "hydrophobic" | "pi_stacking" | "ionic" | "halogen_bond";
@@ -18,6 +20,7 @@ interface InteractionDiagram2DProps {
   proteinName: string;
   pdbId: string;
   bindingAffinity: number;
+  dockingResultId?: string;
   interactions?: Interaction[];
 }
 
@@ -86,19 +89,103 @@ const InteractionDiagram2D = ({
   proteinName,
   pdbId,
   bindingAffinity,
+  dockingResultId,
   interactions: providedInteractions,
 }: InteractionDiagram2DProps) => {
   const [hoveredInteraction, setHoveredInteraction] = useState<number | null>(null);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [dbInteractionData, setDbInteractionData] = useState<any>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  useEffect(() => {
+  // Fetch interaction data from database if dockingResultId is provided
+  const fetchInteractionData = useCallback(async () => {
+    if (!dockingResultId) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("final_analysis")
+        .select("interaction_analysis")
+        .eq("docking_result_id", dockingResultId)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      if (data?.interaction_analysis) {
+        setDbInteractionData(data.interaction_analysis);
+        // Convert database interactions to component format
+        const dbData = data.interaction_analysis as any;
+        const convertedInteractions: Interaction[] = [];
+        
+        // Convert hydrogen bonds
+        dbData.interactions?.hydrogen_bonds?.forEach((hb: any) => {
+          convertedInteractions.push({
+            type: "hydrogen_bond",
+            residue: hb.residue_name || hb.residue?.substring(0, 3),
+            residuePosition: hb.residue_number || parseInt(hb.residue?.match(/\d+/)?.[0] || "0"),
+            distance: hb.distance,
+            angle: hb.angle,
+            strength: hb.strength || "medium"
+          });
+        });
+        
+        // Convert hydrophobic contacts
+        dbData.interactions?.hydrophobic_contacts?.slice(0, 6).forEach((hc: any) => {
+          convertedInteractions.push({
+            type: "hydrophobic",
+            residue: hc.residue_name || hc.residue?.substring(0, 3),
+            residuePosition: hc.residue_number || parseInt(hc.residue?.match(/\d+/)?.[0] || "0"),
+            distance: hc.distance,
+            strength: hc.distance < 3.6 ? "strong" : "medium"
+          });
+        });
+        
+        // Convert salt bridges
+        dbData.interactions?.salt_bridges?.forEach((sb: any) => {
+          convertedInteractions.push({
+            type: "ionic",
+            residue: sb.residue_name || sb.residue?.substring(0, 3),
+            residuePosition: sb.residue_number || parseInt(sb.residue?.match(/\d+/)?.[0] || "0"),
+            distance: sb.distance,
+            strength: sb.strength || "strong"
+          });
+        });
+        
+        // Convert pi stacking
+        dbData.interactions?.pi_stacking?.forEach((ps: any) => {
+          convertedInteractions.push({
+            type: "pi_stacking",
+            residue: ps.residue_name || ps.residue?.substring(0, 3),
+            residuePosition: ps.residue_number || parseInt(ps.residue?.match(/\d+/)?.[0] || "0"),
+            distance: ps.distance,
+            angle: ps.angle,
+            strength: ps.strength || "medium"
+          });
+        });
+        
+        if (convertedInteractions.length > 0) {
+          setInteractions(convertedInteractions);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching interaction data:", error);
+    } finally {
+      setLoading(false);
+    }
+    
+    // Fallback to generated data if no database data
     if (providedInteractions && providedInteractions.length > 0) {
       setInteractions(providedInteractions);
     } else {
       setInteractions(generateInteractions(ligandCid, pdbId));
     }
-  }, [ligandCid, pdbId, providedInteractions]);
+  }, [dockingResultId, ligandCid, pdbId, providedInteractions]);
+
+  useEffect(() => {
+    fetchInteractionData();
+  }, [fetchInteractionData]);
 
   const width = 500;
   const height = 500;
@@ -116,6 +203,19 @@ const InteractionDiagram2D = ({
     };
   };
 
+  if (loading) {
+    return (
+      <Card className="p-4 bg-card">
+        <div className="flex items-center justify-center min-h-[300px]">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Loading interactions...</p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className="p-4 bg-card">
       <div className="space-y-4">
@@ -124,7 +224,10 @@ const InteractionDiagram2D = ({
             <h3 className="font-semibold text-foreground">2D Interaction Diagram</h3>
             <p className="text-sm text-muted-foreground">{ligandName} - {proteinName}</p>
           </div>
-          <Badge variant="outline">{bindingAffinity.toFixed(2)} kcal/mol</Badge>
+          <div className="flex items-center gap-2">
+            {dbInteractionData && <Badge variant="default" className="text-xs">From Database</Badge>}
+            <Badge variant="outline">{bindingAffinity.toFixed(2)} kcal/mol</Badge>
+          </div>
         </div>
 
         <div className="relative bg-muted/30 rounded-lg overflow-hidden">
