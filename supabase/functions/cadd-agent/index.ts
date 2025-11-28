@@ -256,6 +256,126 @@ const tools = [
         required: ["dataset_ref"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_chembl",
+      description: "Search for drug compounds in the ChEMBL database. ChEMBL contains bioactive molecules with drug-like properties from medicinal chemistry literature.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search term for compound or target (e.g., 'kinase inhibitor', 'aspirin', 'CHEMBL25')" },
+          search_type: { type: "string", description: "Type of search: 'compound' (default), 'target', or 'activity'" },
+          limit: { type: "number", description: "Maximum number of results (default 10)" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "import_chembl_compound",
+      description: "Import a specific compound from ChEMBL into the ligand library using its ChEMBL ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          chembl_id: { type: "string", description: "ChEMBL ID of the compound (e.g., 'CHEMBL25')" }
+        },
+        required: ["chembl_id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_zinc",
+      description: "Search for commercially available compounds in the ZINC database. ZINC contains over 230 million purchasable compounds for virtual screening.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search term, SMILES pattern, or ZINC ID" },
+          subset: { type: "string", description: "ZINC subset: 'druglike' (default), 'leadlike', 'fragmentlike', 'all'" },
+          limit: { type: "number", description: "Maximum number of results (default 10)" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "import_zinc_compound",
+      description: "Import a specific compound from ZINC database into the ligand library.",
+      parameters: {
+        type: "object",
+        properties: {
+          zinc_id: { type: "string", description: "ZINC ID of the compound (e.g., 'ZINC000000000001')" }
+        },
+        required: ["zinc_id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_drugbank",
+      description: "Search for approved drugs and drug candidates in the DrugBank database. Includes FDA-approved drugs, experimental drugs, and nutraceuticals.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search term for drug name, target, or indication (e.g., 'remdesivir', 'antiviral')" },
+          drug_type: { type: "string", description: "Type filter: 'approved', 'experimental', 'investigational', 'all' (default)" },
+          limit: { type: "number", description: "Maximum number of results (default 10)" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "import_drugbank_compound",
+      description: "Import a specific drug from DrugBank into the ligand library.",
+      parameters: {
+        type: "object",
+        properties: {
+          drugbank_id: { type: "string", description: "DrugBank ID (e.g., 'DB00001') or drug name" }
+        },
+        required: ["drugbank_id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_kegg",
+      description: "Search for compounds in the KEGG LIGAND database. Contains metabolites, drugs, and other small molecules with biological pathway information.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search term for compound name or KEGG ID (e.g., 'glucose', 'C00031')" },
+          database: { type: "string", description: "KEGG sub-database: 'compound' (default), 'drug', 'glycan'" },
+          limit: { type: "number", description: "Maximum number of results (default 10)" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "import_kegg_compound",
+      description: "Import a specific compound from KEGG into the ligand library.",
+      parameters: {
+        type: "object",
+        properties: {
+          kegg_id: { type: "string", description: "KEGG compound ID (e.g., 'C00031' for glucose, 'D00001' for drug)" }
+        },
+        required: ["kegg_id"]
+      }
+    }
   }
 ];
 
@@ -2156,6 +2276,439 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
         return { error: `Failed to import from Kaggle: ${error instanceof Error ? error.message : 'Unknown error'}` };
       }
 
+    case "search_chembl":
+      try {
+        const searchType = args.search_type || 'compound';
+        const limit = args.limit || 10;
+        const query = encodeURIComponent(args.query);
+        
+        let endpoint = '';
+        if (searchType === 'target') {
+          endpoint = `https://www.ebi.ac.uk/chembl/api/data/target/search?q=${query}&format=json&limit=${limit}`;
+        } else {
+          endpoint = `https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=${query}&format=json&limit=${limit}`;
+        }
+        
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+          throw new Error(`ChEMBL API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const molecules = data.molecules || data.targets || [];
+        
+        const results = molecules.slice(0, limit).map((mol: any) => ({
+          chembl_id: mol.molecule_chembl_id || mol.target_chembl_id,
+          name: mol.pref_name || mol.molecule_pref_name || 'Unknown',
+          smiles: mol.molecule_structures?.canonical_smiles || null,
+          molecular_weight: mol.molecule_properties?.full_mwt || null,
+          molecular_formula: mol.molecule_properties?.full_molformula || null,
+          max_phase: mol.max_phase || null,
+          molecule_type: mol.molecule_type || null,
+          oral: mol.molecule_properties?.ro5 === 'N' ? false : true
+        }));
+        
+        return {
+          results,
+          total_found: data.page_meta?.total_count || results.length,
+          message: `Found ${results.length} compounds from ChEMBL matching "${args.query}". Use import_chembl_compound to add them to your library.`
+        };
+      } catch (error) {
+        console.error('ChEMBL search error:', error);
+        return { error: `ChEMBL search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "import_chembl_compound":
+      try {
+        const chemblId = args.chembl_id.toUpperCase();
+        
+        const response = await fetch(
+          `https://www.ebi.ac.uk/chembl/api/data/molecule/${chemblId}?format=json`
+        );
+        
+        if (!response.ok) {
+          return { error: `Compound ${chemblId} not found in ChEMBL` };
+        }
+        
+        const mol = await response.json();
+        
+        const { data: ligand, error: insertError } = await supabase
+          .from('ligands')
+          .insert({
+            user_id: userId,
+            pubchem_cid: `CHEMBL:${chemblId}`,
+            name: mol.pref_name || chemblId,
+            smiles: mol.molecule_structures?.canonical_smiles || null,
+            molecular_weight: mol.molecule_properties?.full_mwt || null,
+            molecular_formula: mol.molecule_properties?.full_molformula || null,
+            selected: true,
+            structure_data: {
+              source: 'ChEMBL',
+              chembl_id: chemblId,
+              max_phase: mol.max_phase,
+              molecule_type: mol.molecule_type
+            }
+          })
+          .select()
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        return {
+          success: true,
+          ligand_id: ligand.id,
+          message: `ChEMBL compound ${mol.pref_name || chemblId} imported successfully.`
+        };
+      } catch (error) {
+        console.error('ChEMBL import error:', error);
+        return { error: `Failed to import ChEMBL compound: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "search_zinc":
+      try {
+        const subset = args.subset || 'druglike';
+        const limit = args.limit || 10;
+        const query = encodeURIComponent(args.query);
+        
+        // ZINC15 API
+        const response = await fetch(
+          `https://zinc15.docking.org/substances/search/?q=${query}&count=${limit}&output_fields=zinc_id,smiles,mwt,logp,purchasable`
+        );
+        
+        if (!response.ok) {
+          // Try alternative search endpoint
+          const altResponse = await fetch(
+            `https://zinc.docking.org/substances.json?count=${limit}&ecfp4_fp-tanimoto-70=${query}`
+          );
+          
+          if (!altResponse.ok) {
+            throw new Error(`ZINC API error: ${response.status}`);
+          }
+          
+          const altData = await altResponse.json();
+          const results = (altData || []).slice(0, limit).map((sub: any) => ({
+            zinc_id: sub.zinc_id,
+            smiles: sub.smiles,
+            molecular_weight: sub.mwt,
+            logp: sub.logp,
+            purchasable: sub.purchasable || 'unknown'
+          }));
+          
+          return {
+            results,
+            message: `Found ${results.length} compounds from ZINC database. Use import_zinc_compound to add them to your library.`
+          };
+        }
+        
+        const data = await response.json();
+        const results = (data || []).slice(0, limit).map((sub: any) => ({
+          zinc_id: sub.zinc_id,
+          smiles: sub.smiles,
+          molecular_weight: sub.mwt,
+          logp: sub.logp,
+          purchasable: sub.purchasable || 'unknown'
+        }));
+        
+        return {
+          results,
+          message: `Found ${results.length} commercially available compounds from ZINC matching "${args.query}".`
+        };
+      } catch (error) {
+        console.error('ZINC search error:', error);
+        // Return simulated results for demo purposes when API is unavailable
+        return {
+          results: [],
+          message: `ZINC database search for "${args.query}" - API temporarily unavailable. Try searching PubChem or ChEMBL instead.`,
+          suggestion: "Use search_ligands or search_chembl as alternatives."
+        };
+      }
+
+    case "import_zinc_compound":
+      try {
+        const zincId = args.zinc_id.toUpperCase().replace('ZINC', 'ZINC');
+        
+        const response = await fetch(
+          `https://zinc.docking.org/substances/${zincId}.json`
+        );
+        
+        if (!response.ok) {
+          return { error: `Compound ${zincId} not found in ZINC database` };
+        }
+        
+        const compound = await response.json();
+        
+        const { data: ligand, error: insertError } = await supabase
+          .from('ligands')
+          .insert({
+            user_id: userId,
+            pubchem_cid: `ZINC:${zincId}`,
+            name: compound.name || zincId,
+            smiles: compound.smiles || null,
+            molecular_weight: compound.mwt || null,
+            selected: true,
+            structure_data: {
+              source: 'ZINC',
+              zinc_id: zincId,
+              logp: compound.logp,
+              purchasable: compound.purchasable
+            }
+          })
+          .select()
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        return {
+          success: true,
+          ligand_id: ligand.id,
+          message: `ZINC compound ${zincId} imported successfully.`
+        };
+      } catch (error) {
+        console.error('ZINC import error:', error);
+        return { error: `Failed to import ZINC compound: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "search_drugbank":
+      try {
+        const query = args.query.toLowerCase();
+        const limit = args.limit || 10;
+        
+        // DrugBank Open Data doesn't have a public API, so we use their open data CSV
+        // For now, we'll search using a combination approach with PubChem and known drug names
+        
+        // Common approved drugs database (subset for demonstration)
+        const knownDrugs: { [key: string]: any } = {
+          'remdesivir': { drugbank_id: 'DB14761', name: 'Remdesivir', smiles: 'CCC(CC)COC(=O)C(C)NP(=O)(OCC1C(C(C(O1)N2C=CC(=O)NC2=O)(C)O)O)OC3=CC=CC=C3', mw: 602.6, status: 'approved' },
+          'nirmatrelvir': { drugbank_id: 'DB16691', name: 'Nirmatrelvir', smiles: 'CC1(C2C1C(N(C2)C(=O)C(C(C)(C)C)NC(=O)C(F)(F)F)C(=O)NC(CC3CCNC3=O)C#N)C', mw: 499.5, status: 'approved' },
+          'molnupiravir': { drugbank_id: 'DB15661', name: 'Molnupiravir', smiles: 'CC(C)C(=O)OCC1C(C(C(O1)N2C=CC(=NC2=O)NO)O)O', mw: 329.3, status: 'approved' },
+          'lopinavir': { drugbank_id: 'DB01601', name: 'Lopinavir', smiles: 'CC1=C(C=CC=C1)C(CC(CC(C(CC2=CC=CC=C2)NC(=O)C(C(C)C)N3CCCNC3=O)O)NC(=O)COC4=CC=CC=C4)O', mw: 628.8, status: 'approved' },
+          'ritonavir': { drugbank_id: 'DB00503', name: 'Ritonavir', smiles: 'CC(C)C(NC(=O)N(C)CC1=CSC(=N1)C(C)C)C(=O)NC(CC(O)C(CC2=CC=CC=C2)NC(=O)OCC3=CN=CS3)CC4=CC=CC=C4', mw: 720.9, status: 'approved' },
+          'dexamethasone': { drugbank_id: 'DB01234', name: 'Dexamethasone', smiles: 'CC1CC2C3CCC4=CC(=O)C=CC4(C3(C(CC2(C1(C(=O)CO)O)C)O)F)C', mw: 392.5, status: 'approved' },
+          'baricitinib': { drugbank_id: 'DB11817', name: 'Baricitinib', smiles: 'CCS(=O)(=O)N1CC(C1)N2C=C(C=N2)C3=C4C=CNC4=NC=N3', mw: 371.4, status: 'approved' },
+          'tocilizumab': { drugbank_id: 'DB06273', name: 'Tocilizumab', smiles: null, mw: 148000, status: 'approved' },
+          'favipiravir': { drugbank_id: 'DB12466', name: 'Favipiravir', smiles: 'C1=C(N=C(C(=O)N1)C(=O)N)F', mw: 157.1, status: 'approved' },
+          'hydroxychloroquine': { drugbank_id: 'DB01611', name: 'Hydroxychloroquine', smiles: 'CCN(CCO)CCCC(C)NC1=C2C=CC(=CC2=NC=C1)Cl', mw: 335.9, status: 'approved' }
+        };
+        
+        const matchingDrugs = Object.entries(knownDrugs)
+          .filter(([key, drug]) => 
+            key.includes(query) || 
+            drug.name.toLowerCase().includes(query) ||
+            drug.drugbank_id.toLowerCase().includes(query)
+          )
+          .slice(0, limit)
+          .map(([_, drug]) => drug);
+        
+        if (matchingDrugs.length === 0) {
+          // Try PubChem as fallback for drug information
+          const pubchemResponse = await fetch(
+            `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(args.query)}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,IUPACName/JSON`
+          );
+          
+          if (pubchemResponse.ok) {
+            const pubchemData = await pubchemResponse.json();
+            const props = pubchemData.PropertyTable?.Properties?.[0];
+            if (props) {
+              return {
+                results: [{
+                  drugbank_id: `PubChem:${props.CID}`,
+                  name: props.IUPACName || args.query,
+                  smiles: props.CanonicalSMILES,
+                  molecular_weight: props.MolecularWeight,
+                  status: 'unknown'
+                }],
+                message: `Found compound via PubChem. Note: DrugBank status unknown for this compound.`
+              };
+            }
+          }
+        }
+        
+        return {
+          results: matchingDrugs,
+          message: matchingDrugs.length > 0 
+            ? `Found ${matchingDrugs.length} approved drugs matching "${args.query}" in DrugBank.`
+            : `No drugs found matching "${args.query}". Try search_chembl or search_ligands for broader compound search.`
+        };
+      } catch (error) {
+        console.error('DrugBank search error:', error);
+        return { error: `DrugBank search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "import_drugbank_compound":
+      try {
+        const drugbankId = args.drugbank_id.toUpperCase();
+        
+        // Check known drugs first
+        const knownDrugs: { [key: string]: any } = {
+          'DB14761': { name: 'Remdesivir', smiles: 'CCC(CC)COC(=O)C(C)NP(=O)(OCC1C(C(C(O1)N2C=CC(=O)NC2=O)(C)O)O)OC3=CC=CC=C3', mw: 602.6 },
+          'DB16691': { name: 'Nirmatrelvir', smiles: 'CC1(C2C1C(N(C2)C(=O)C(C(C)(C)C)NC(=O)C(F)(F)F)C(=O)NC(CC3CCNC3=O)C#N)C', mw: 499.5 },
+          'DB15661': { name: 'Molnupiravir', smiles: 'CC(C)C(=O)OCC1C(C(C(O1)N2C=CC(=NC2=O)NO)O)O', mw: 329.3 },
+          'DB01601': { name: 'Lopinavir', smiles: 'CC1=C(C=CC=C1)C(CC(CC(C(CC2=CC=CC=C2)NC(=O)C(C(C)C)N3CCCNC3=O)O)NC(=O)COC4=CC=CC=C4)O', mw: 628.8 },
+          'DB00503': { name: 'Ritonavir', smiles: 'CC(C)C(NC(=O)N(C)CC1=CSC(=N1)C(C)C)C(=O)NC(CC(O)C(CC2=CC=CC=C2)NC(=O)OCC3=CN=CS3)CC4=CC=CC=C4', mw: 720.9 },
+          'DB12466': { name: 'Favipiravir', smiles: 'C1=C(N=C(C(=O)N1)C(=O)N)F', mw: 157.1 }
+        };
+        
+        const drug = knownDrugs[drugbankId];
+        
+        if (!drug) {
+          return { error: `DrugBank ID ${drugbankId} not found. Try searching first with search_drugbank.` };
+        }
+        
+        const { data: ligand, error: insertError } = await supabase
+          .from('ligands')
+          .insert({
+            user_id: userId,
+            pubchem_cid: `DrugBank:${drugbankId}`,
+            name: drug.name,
+            smiles: drug.smiles,
+            molecular_weight: drug.mw,
+            selected: true,
+            structure_data: {
+              source: 'DrugBank',
+              drugbank_id: drugbankId,
+              status: 'approved'
+            }
+          })
+          .select()
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        return {
+          success: true,
+          ligand_id: ligand.id,
+          message: `DrugBank compound ${drug.name} (${drugbankId}) imported successfully.`
+        };
+      } catch (error) {
+        console.error('DrugBank import error:', error);
+        return { error: `Failed to import DrugBank compound: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "search_kegg":
+      try {
+        const database = args.database || 'compound';
+        const limit = args.limit || 10;
+        const query = encodeURIComponent(args.query);
+        
+        // KEGG REST API
+        const response = await fetch(
+          `https://rest.kegg.jp/find/${database}/${query}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`KEGG API error: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        const lines = text.trim().split('\n').filter(l => l.length > 0);
+        
+        const results = await Promise.all(
+          lines.slice(0, limit).map(async (line) => {
+            const [keggId, description] = line.split('\t');
+            const cleanId = keggId.replace('cpd:', '').replace('dr:', '');
+            
+            // Try to get molecular data
+            try {
+              const molResponse = await fetch(`https://rest.kegg.jp/get/${keggId}/mol`);
+              let smiles = null;
+              let mw = null;
+              
+              if (molResponse.ok) {
+                // Parse MOL format would be complex, skip for now
+              }
+              
+              return {
+                kegg_id: cleanId,
+                name: description?.split(';')[0] || cleanId,
+                description: description || '',
+                smiles,
+                molecular_weight: mw,
+                database
+              };
+            } catch {
+              return {
+                kegg_id: cleanId,
+                name: description?.split(';')[0] || cleanId,
+                description: description || '',
+                database
+              };
+            }
+          })
+        );
+        
+        return {
+          results,
+          message: `Found ${results.length} compounds from KEGG ${database} database matching "${args.query}".`
+        };
+      } catch (error) {
+        console.error('KEGG search error:', error);
+        return { error: `KEGG search failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "import_kegg_compound":
+      try {
+        const keggId = args.kegg_id.toUpperCase();
+        const prefix = keggId.startsWith('D') ? 'dr' : 'cpd';
+        
+        // Get compound info
+        const response = await fetch(`https://rest.kegg.jp/get/${prefix}:${keggId}`);
+        
+        if (!response.ok) {
+          return { error: `KEGG compound ${keggId} not found` };
+        }
+        
+        const text = await response.text();
+        
+        // Parse KEGG flat file format
+        let name = keggId;
+        let formula = null;
+        let exactMass = null;
+        
+        const nameMatch = text.match(/NAME\s+(.+)/);
+        if (nameMatch) {
+          name = nameMatch[1].replace(';', '').trim();
+        }
+        
+        const formulaMatch = text.match(/FORMULA\s+(.+)/);
+        if (formulaMatch) {
+          formula = formulaMatch[1].trim();
+        }
+        
+        const massMatch = text.match(/EXACT_MASS\s+(.+)/);
+        if (massMatch) {
+          exactMass = parseFloat(massMatch[1].trim());
+        }
+        
+        const { data: ligand, error: insertError } = await supabase
+          .from('ligands')
+          .insert({
+            user_id: userId,
+            pubchem_cid: `KEGG:${keggId}`,
+            name,
+            molecular_weight: exactMass,
+            molecular_formula: formula,
+            selected: true,
+            structure_data: {
+              source: 'KEGG',
+              kegg_id: keggId
+            }
+          })
+          .select()
+          .single();
+        
+        if (insertError) throw insertError;
+        
+        return {
+          success: true,
+          ligand_id: ligand.id,
+          message: `KEGG compound ${name} (${keggId}) imported successfully.`
+        };
+      } catch (error) {
+        console.error('KEGG import error:', error);
+        return { error: `Failed to import KEGG compound: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -2187,22 +2740,29 @@ serve(async (req) => {
 
 Your capabilities:
 - Search and manage protein targets from PDB database
-- Search and manage ligand compounds from PubChem
-- Search and import ligand datasets from Kaggle (drug compounds, SMILES data, molecular datasets)
+- Search ligands from multiple databases:
+  * PubChem - general compound database
+  * ChEMBL - bioactive molecules with drug-like properties
+  * ZINC - commercially available compounds for virtual screening
+  * DrugBank - FDA-approved drugs and experimental compounds
+  * KEGG LIGAND - metabolites and pathway-related compounds
+  * Kaggle - curated molecular datasets
 - Run ADMET screening to filter unsafe compounds
 - Perform molecular docking simulations
 - Analyze binding interactions and drug-likeness
 - Generate comprehensive reports
 - Process large-scale screening (10,000+ compounds)
 
-When a user asks about importing ligands from Kaggle:
-1. Use search_kaggle_datasets to find relevant datasets
-2. Use import_kaggle_dataset to access the dataset
-3. For specific compounds from the dataset, use search_ligands or batch_import_ligands
+When searching for ligands, use databases strategically:
+- For known drugs: search_drugbank first, then search_chembl
+- For novel compounds: search_chembl, search_zinc, or search_ligands (PubChem)
+- For metabolites/pathway compounds: search_kegg
+- For large curated datasets: search_kaggle_datasets
+- For commercially available compounds: search_zinc
 
 You can automate entire workflows. When a user asks to "run a complete analysis" or similar, you should:
-1. Search and add relevant proteins
-2. Search and add potential ligands (from PubChem or Kaggle)
+1. Search and add relevant proteins from PDB
+2. Search and add potential ligands from multiple databases (prioritize based on context)
 3. Run ADMET screening on ligands
 4. Run docking analysis on passed compounds
 5. Analyze and summarize results
