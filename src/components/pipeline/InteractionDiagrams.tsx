@@ -3,10 +3,12 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Atom, Network, ArrowRight } from "lucide-react";
+import { Loader2, Atom, Network, ArrowRight, Box, Layers } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import InteractionDiagram2D from "./InteractionDiagram2D";
+import InteractionDiagram3D from "./InteractionDiagram3D";
 import SchematicDiagram from "./SchematicDiagram";
+import SchematicDiagram3D from "./SchematicDiagram3D";
 
 interface DockingCompound {
   id: string;
@@ -119,8 +121,8 @@ const InteractionDiagrams = ({ onNavigate }: InteractionDiagramsProps) => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-foreground">2D Interaction Diagrams</h2>
-          <p className="text-muted-foreground">Visualize protein-ligand interactions</p>
+          <h2 className="text-2xl font-bold text-foreground">Interaction Diagrams</h2>
+          <p className="text-muted-foreground">3D rotatable visualizations similar to Discovery Studio</p>
         </div>
         
         <Select value={selectedCompound} onValueChange={setSelectedCompound}>
@@ -142,19 +144,52 @@ const InteractionDiagrams = ({ onNavigate }: InteractionDiagramsProps) => {
       </div>
 
       {currentCompound && (
-        <Tabs defaultValue="interactive" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="interactive" className="gap-2">
-              <Network className="h-4 w-4" />
-              Interactive Diagram
+        <Tabs defaultValue="3d-interaction" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsTrigger value="3d-interaction" className="gap-2">
+              <Box className="h-4 w-4" />
+              3D Interaction
             </TabsTrigger>
-            <TabsTrigger value="schematic" className="gap-2">
+            <TabsTrigger value="3d-structure" className="gap-2">
+              <Layers className="h-4 w-4" />
+              3D Structure
+            </TabsTrigger>
+            <TabsTrigger value="2d-interaction" className="gap-2">
+              <Network className="h-4 w-4" />
+              2D Diagram
+            </TabsTrigger>
+            <TabsTrigger value="2d-schematic" className="gap-2">
               <Atom className="h-4 w-4" />
-              Schematic View
+              2D Schematic
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="interactive">
+          <TabsContent value="3d-interaction">
+            <InteractionDiagram3D
+              ligandName={currentCompound.ligandName}
+              ligandCid={currentCompound.ligandCid}
+              proteinName={currentCompound.proteinName}
+              pdbId={currentCompound.pdbId}
+              bindingAffinity={currentCompound.bindingAffinity}
+              dockingResultId={currentCompound.dockingResultId}
+            />
+          </TabsContent>
+
+          <TabsContent value="3d-structure">
+            <SchematicDiagram3D
+              ligandName={currentCompound.ligandName}
+              ligandCid={currentCompound.ligandCid}
+              smiles={currentCompound.smiles}
+              molecularFormula={currentCompound.molecularFormula}
+              molecularWeight={currentCompound.molecularWeight}
+              proteinName={currentCompound.proteinName}
+              pdbId={currentCompound.pdbId}
+              bindingAffinity={currentCompound.bindingAffinity}
+              dockingScore={currentCompound.dockingScore}
+            />
+          </TabsContent>
+
+          <TabsContent value="2d-interaction">
             <InteractionDiagram2D
               ligandName={currentCompound.ligandName}
               ligandCid={currentCompound.ligandCid}
@@ -165,7 +200,7 @@ const InteractionDiagrams = ({ onNavigate }: InteractionDiagramsProps) => {
             />
           </TabsContent>
 
-          <TabsContent value="schematic">
+          <TabsContent value="2d-schematic">
             <SchematicDiagram
               ligandName={currentCompound.ligandName}
               ligandCid={currentCompound.ligandCid}
