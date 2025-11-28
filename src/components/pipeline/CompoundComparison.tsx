@@ -132,13 +132,23 @@ export const CompoundComparison = () => {
   };
 
   const getRadarData = () => {
-    return [
-      { metric: "Absorption", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.absorption])) },
-      { metric: "Distribution", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.distribution])) },
-      { metric: "Metabolism", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.metabolism])) },
-      { metric: "Excretion", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.excretion])) },
-      { metric: "Safety", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, 100 - c.toxicity])) },
-    ];
+    const metrics = ["Absorption", "Distribution", "Metabolism", "Excretion", "Safety"];
+    return metrics.map(metric => {
+      const dataPoint: Record<string, any> = { metric };
+      compoundData.forEach((compound, index) => {
+        let value: number;
+        switch (metric) {
+          case "Absorption": value = compound.absorption; break;
+          case "Distribution": value = compound.distribution; break;
+          case "Metabolism": value = compound.metabolism; break;
+          case "Excretion": value = compound.excretion; break;
+          case "Safety": value = 100 - compound.toxicity; break;
+          default: value = 0;
+        }
+        dataPoint[compound.ligand_name] = value;
+      });
+      return dataPoint;
+    });
   };
 
   // Distinct colors for each compound polygon
@@ -203,10 +213,11 @@ export const CompoundComparison = () => {
                     <Radar
                       key={compound.id}
                       name={compound.ligand_name}
-                      dataKey={`compound${index}`}
-                      stroke={colors[index]}
-                      fill={colors[index]}
-                      fillOpacity={0.3}
+                      dataKey={compound.ligand_name}
+                      stroke={colors[index % colors.length]}
+                      fill={colors[index % colors.length]}
+                      fillOpacity={0.25}
+                      strokeWidth={2}
                     />
                   ))}
                   <Legend />
