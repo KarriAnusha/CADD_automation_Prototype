@@ -37,7 +37,7 @@ const Index = () => {
       <main className="container mx-auto px-4 py-6">
         <Card className="shadow-elevated">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 lg:grid-cols-10 gap-1 bg-muted p-2">
+            <TabsList className="flex w-full overflow-x-auto gap-1 bg-muted p-2">
               <TabsTrigger value="agent" className="flex items-center gap-1.5 bg-gradient-to-r from-primary/20 to-secondary/20 text-xs">
                 <Sparkles className="h-4 w-4" />
                 <span className="hidden lg:inline">AI Agent</span>
