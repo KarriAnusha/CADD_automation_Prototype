@@ -70,6 +70,60 @@ export type Database = {
           },
         ]
       }
+      batch_jobs: {
+        Row: {
+          batch_size: number
+          completed_at: string | null
+          created_at: string
+          error_log: Json | null
+          failed_items: number
+          id: string
+          input_data: Json | null
+          job_type: string
+          output_data: Json | null
+          processed_items: number
+          started_at: string | null
+          status: string
+          total_items: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          batch_size?: number
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_items?: number
+          id?: string
+          input_data?: Json | null
+          job_type: string
+          output_data?: Json | null
+          processed_items?: number
+          started_at?: string | null
+          status?: string
+          total_items?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          batch_size?: number
+          completed_at?: string | null
+          created_at?: string
+          error_log?: Json | null
+          failed_items?: number
+          id?: string
+          input_data?: Json | null
+          job_type?: string
+          output_data?: Json | null
+          processed_items?: number
+          started_at?: string | null
+          status?: string
+          total_items?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       docking_results: {
         Row: {
           binding_affinity: number | null
