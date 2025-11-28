@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { X, TrendingDown, TrendingUp } from "lucide-react";
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer } from "recharts";
 
 interface CompoundData {
   id: string;
@@ -136,33 +135,36 @@ export const CompoundComparison = () => {
     setCompoundData(compoundData.filter(c => c.id !== compoundId));
   };
 
-  const getRadarData = () => {
-    const metrics = ["Absorption", "Distribution", "Metabolism", "Excretion", "Safety"];
-    return metrics.map(metric => {
-      const dataPoint: Record<string, any> = { metric };
-      compoundData.forEach((compound, index) => {
-        let value: number;
-        switch (metric) {
-          case "Absorption": value = compound.absorption; break;
-          case "Distribution": value = compound.distribution; break;
-          case "Metabolism": value = compound.metabolism; break;
-          case "Excretion": value = compound.excretion; break;
-          case "Safety": value = 100 - compound.toxicity; break;
-          default: value = 0;
-        }
-        dataPoint[compound.ligand_name] = value;
-      });
-      return dataPoint;
-    });
+  const admetProperties = ["Absorption", "Distribution", "Metabolism", "Excretion", "Safety"];
+
+  const getHeatmapValue = (compound: CompoundData, property: string): number => {
+    switch (property) {
+      case "Absorption": return compound.absorption;
+      case "Distribution": return compound.distribution;
+      case "Metabolism": return compound.metabolism;
+      case "Excretion": return compound.excretion;
+      case "Safety": return 100 - compound.toxicity;
+      default: return 0;
+    }
   };
 
-  // Distinct colors for each compound polygon
-  const colors = [
-    "#3b82f6", // blue
-    "#ef4444", // red  
-    "#22c55e", // green
-    "#f59e0b", // amber
-  ];
+  const getHeatmapColor = (value: number): string => {
+    // Red (low) -> Yellow (mid) -> Green (high)
+    const normalized = Math.max(0, Math.min(100, value)) / 100;
+    if (normalized < 0.5) {
+      // Red to Yellow
+      const r = 239;
+      const g = Math.round(68 + (normalized * 2) * (163 - 68));
+      const b = 68;
+      return `rgb(${r}, ${g}, ${b})`;
+    } else {
+      // Yellow to Green
+      const r = Math.round(239 - ((normalized - 0.5) * 2) * (239 - 34));
+      const g = Math.round(163 + ((normalized - 0.5) * 2) * (197 - 163));
+      const b = Math.round(68 - ((normalized - 0.5) * 2) * (68 - 94));
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+  };
 
   if (loading) {
     return (
@@ -209,25 +211,60 @@ export const CompoundComparison = () => {
               <CardDescription>Visual comparison of pharmacological properties</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <RadarChart data={getRadarData()}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="metric" />
-                  <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                  {compoundData.map((compound, index) => (
-                    <Radar
-                      key={compound.id}
-                      name={compound.ligand_name}
-                      dataKey={compound.ligand_name}
-                      stroke={colors[index % colors.length]}
-                      fill={colors[index % colors.length]}
-                      fillOpacity={0.25}
-                      strokeWidth={2}
-                    />
-                  ))}
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
+              {/* Heatmap */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-3 text-left text-sm font-medium text-muted-foreground border-b">Compound</th>
+                      {admetProperties.map(prop => (
+                        <th key={prop} className="p-3 text-center text-sm font-medium text-muted-foreground border-b min-w-[100px]">
+                          {prop}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {compoundData.map((compound) => (
+                      <tr key={compound.id} className="border-b last:border-b-0">
+                        <td className="p-3 text-sm font-medium truncate max-w-[150px]" title={compound.ligand_name}>
+                          {compound.ligand_name}
+                        </td>
+                        {admetProperties.map(prop => {
+                          const value = getHeatmapValue(compound, prop);
+                          return (
+                            <td key={prop} className="p-2">
+                              <div
+                                className="rounded-md p-3 text-center font-semibold text-sm shadow-sm"
+                                style={{ 
+                                  backgroundColor: getHeatmapColor(value),
+                                  color: value > 60 ? '#fff' : '#1f2937'
+                                }}
+                                title={`${prop}: ${value.toFixed(1)}%`}
+                              >
+                                {value.toFixed(0)}%
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Color Legend */}
+              <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <span>Low (0%)</span>
+                <div className="flex h-4 w-32 rounded overflow-hidden">
+                  <div className="flex-1" style={{ backgroundColor: 'rgb(239, 68, 68)' }} />
+                  <div className="flex-1" style={{ backgroundColor: 'rgb(239, 163, 68)' }} />
+                  <div className="flex-1" style={{ backgroundColor: 'rgb(234, 179, 8)' }} />
+                  <div className="flex-1" style={{ backgroundColor: 'rgb(132, 204, 22)' }} />
+                  <div className="flex-1" style={{ backgroundColor: 'rgb(34, 197, 94)' }} />
+                </div>
+                <span>High (100%)</span>
+              </div>
             </CardContent>
           </Card>
 
