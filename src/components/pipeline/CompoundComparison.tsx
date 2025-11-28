@@ -59,14 +59,19 @@ export const CompoundComparison = () => {
 
       const compounds: CompoundData[] = await Promise.all(
         (dockingData || []).map(async (result: any) => {
-          const { data: admetData } = await supabase
+          // Get most recent ADMET result for this ligand (handles multiple records)
+          const { data: admetResults } = await supabase
             .from("admet_results")
             .select("*")
             .eq("ligand_id", result.ligands.id)
             .eq("user_id", user.id)
-            .single();
+            .order("created_at", { ascending: false })
+            .limit(1);
 
+          const admetData = admetResults?.[0] || null;
           const poseData = result.pose_data as any;
+          
+          console.log(`Compound ${result.ligands.name} ADMET:`, admetData);
           
           return {
             id: result.id,
