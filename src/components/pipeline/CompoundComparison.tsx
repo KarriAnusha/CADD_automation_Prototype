@@ -137,11 +137,17 @@ export const CompoundComparison = () => {
       { metric: "Distribution", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.distribution])) },
       { metric: "Metabolism", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.metabolism])) },
       { metric: "Excretion", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, c.excretion])) },
-      { metric: "Toxicity", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, 100 - c.toxicity])) },
+      { metric: "Safety", ...Object.fromEntries(compoundData.map((c, i) => [`compound${i}`, 100 - c.toxicity])) },
     ];
   };
 
-  const colors = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--muted))"];
+  // Distinct colors for each compound polygon
+  const colors = [
+    "#3b82f6", // blue
+    "#ef4444", // red  
+    "#22c55e", // green
+    "#f59e0b", // amber
+  ];
 
   if (loading) {
     return (
