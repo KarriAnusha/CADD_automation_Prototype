@@ -157,26 +157,37 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Fetch statistics with unique ligand counts to avoid duplicates from multiple runs
-      const [proteinsRes, ligandsRes, admetPassedRes, admetFailedRes, dockingRes, bestDockingRes] = await Promise.all([
+      // Fetch statistics with unique ligand counts based on LATEST result per ligand
+      const [proteinsRes, ligandsRes, admetStatsRes, dockingStatsRes, bestDockingRes] = await Promise.all([
         supabase.from("proteins").select("id", { count: "exact", head: true }),
         supabase.from("ligands").select("id", { count: "exact", head: true }),
-        supabase.from("admet_results").select("ligand_id").eq("passed_screening", true),
-        supabase.from("admet_results").select("ligand_id").eq("passed_screening", false),
+        supabase.from("admet_results").select("ligand_id, passed_screening, created_at").order("created_at", { ascending: false }),
         supabase.from("docking_results").select("ligand_id").eq("status", "completed"),
         supabase.from("docking_results").select("docking_score").order("docking_score", { ascending: true }).limit(1).maybeSingle(),
       ]);
 
-      // Count unique ligands (deduplicate multiple runs)
-      const uniqueAdmetPassed = new Set(admetPassedRes.data?.map(r => r.ligand_id) || []).size;
-      const uniqueAdmetFailed = new Set(admetFailedRes.data?.map(r => r.ligand_id) || []).size;
-      const uniqueDocked = new Set(dockingRes.data?.map(r => r.ligand_id) || []).size;
+      // Get latest ADMET result per ligand (deduplicate by taking most recent)
+      const latestAdmetByLigand = new Map<string, boolean>();
+      admetStatsRes.data?.forEach(r => {
+        if (!latestAdmetByLigand.has(r.ligand_id)) {
+          latestAdmetByLigand.set(r.ligand_id, r.passed_screening ?? false);
+        }
+      });
+
+      let passedCount = 0;
+      let failedCount = 0;
+      latestAdmetByLigand.forEach(passed => {
+        if (passed) passedCount++;
+        else failedCount++;
+      });
+
+      const uniqueDocked = new Set(dockingStatsRes.data?.map(r => r.ligand_id) || []).size;
 
       setStats({
         proteinsCount: proteinsRes.count || 0,
         ligandsCount: ligandsRes.count || 0,
-        safeCompounds: uniqueAdmetPassed,
-        failedCompounds: uniqueAdmetFailed,
+        safeCompounds: passedCount,
+        failedCompounds: failedCount,
         dockingCompleted: uniqueDocked,
         bestBinding: bestDockingRes.data?.docking_score || 0,
       });
