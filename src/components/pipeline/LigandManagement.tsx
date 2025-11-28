@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus, FileSpreadsheet } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Upload, Download, Dna, Loader2, Check, Trash2, Plus, FileSpreadsheet, Database } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -17,7 +18,10 @@ interface Ligand {
   smiles?: string;
   inchi?: string;
   selected: boolean;
+  source?: string;
 }
+
+type DatabaseSource = "all" | "pubchem" | "chembl" | "drugbank" | "kegg";
 
 const LigandManagement = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,6 +30,7 @@ const LigandManagement = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [selectedDatabase, setSelectedDatabase] = useState<DatabaseSource>("all");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -50,42 +55,77 @@ const LigandManagement = () => {
     if (!searchQuery.trim()) {
       toast({
         title: "Enter a search term",
-        description: "Please enter a compound ID, name, or SMILES",
+        description: "Please enter a compound name, CID, or SMILES",
         variant: "destructive",
       });
       return;
     }
 
     setIsSearching(true);
+    setSearchResults([]);
+    
     try {
-      const response = await fetch(
-        `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(searchQuery)}/property/MolecularFormula,MolecularWeight,CanonicalSMILES,InChI,Title/JSON`
-      );
+      const allResults: Ligand[] = [];
+      
+      // Determine which databases to search
+      const databasesToSearch = selectedDatabase === "all" 
+        ? ["pubchem", "chembl", "drugbank", "kegg"] 
+        : [selectedDatabase];
+      
+      for (const db of databasesToSearch) {
+        let toolName = "";
+        switch (db) {
+          case "pubchem": toolName = "search_ligands"; break;
+          case "chembl": toolName = "search_chembl"; break;
+          case "drugbank": toolName = "search_drugbank"; break;
+          case "kegg": toolName = "search_kegg"; break;
+        }
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('cadd-agent', {
+            body: {
+              directTool: {
+                name: toolName,
+                args: { query: searchQuery, limit: 10 }
+              }
+            }
+          });
 
-      if (!response.ok) throw new Error("Search failed");
+          if (!error && data?.toolResults?.[0]?.results) {
+            const dbResults = data.toolResults[0].results.map((compound: any) => ({
+              pubchem_cid: compound.cid?.toString() || compound.chembl_id || compound.drugbank_id || compound.kegg_id || compound.zinc_id || `${db.toUpperCase()}-${Date.now()}`,
+              name: compound.name || compound.title || "Unknown",
+              molecular_formula: compound.molecular_formula,
+              molecular_weight: compound.molecular_weight,
+              smiles: compound.smiles,
+              inchi: compound.inchi,
+              selected: false,
+              source: db.toUpperCase(),
+            }));
+            allResults.push(...dbResults);
+          }
+        } catch (dbError) {
+          console.error(`Error searching ${db}:`, dbError);
+        }
+      }
 
-      const data = await response.json();
-      const compounds = data.PropertyTable?.Properties || [];
-
-      const ligands: Ligand[] = compounds.slice(0, 20).map((compound: any) => ({
-        pubchem_cid: compound.CID.toString(),
-        name: compound.Title || `Compound ${compound.CID}`,
-        molecular_formula: compound.MolecularFormula,
-        molecular_weight: compound.MolecularWeight,
-        smiles: compound.CanonicalSMILES,
-        inchi: compound.InChI,
-        selected: false,
-      }));
-
-      setSearchResults(ligands);
-      toast({
-        title: "Search Complete",
-        description: `Found ${ligands.length} compounds`,
-      });
+      if (allResults.length === 0) {
+        toast({
+          title: "No Results",
+          description: `No compounds found for "${searchQuery}" in selected database(s)`,
+        });
+      } else {
+        setSearchResults(allResults);
+        toast({
+          title: "Search Complete",
+          description: `Found ${allResults.length} compounds across ${databasesToSearch.length} database(s)`,
+        });
+      }
     } catch (error) {
+      console.error('Search error:', error);
       toast({
         title: "Search Failed",
-        description: "Unable to fetch data from PubChem",
+        description: "Unable to search compound databases",
         variant: "destructive",
       });
     } finally {
@@ -305,11 +345,11 @@ const LigandManagement = () => {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Ligand Library Management</h2>
-          <p className="text-muted-foreground">Manage and screen candidate ligands from PubChem database</p>
+          <p className="text-muted-foreground">Search and manage ligands from PubChem, ChEMBL, DrugBank, and KEGG</p>
         </div>
         <Badge variant="outline" className="gap-2">
-          <Dna className="h-3 w-3" />
-          PubChem
+          <Database className="h-3 w-3" />
+          Multi-Database
         </Badge>
       </div>
 
@@ -406,6 +446,18 @@ const LigandManagement = () => {
         <div className="space-y-3">
           <h3 className="text-lg font-semibold text-foreground">Search Ligands</h3>
           <div className="flex gap-2">
+            <Select value={selectedDatabase} onValueChange={(v) => setSelectedDatabase(v as DatabaseSource)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select database" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Databases</SelectItem>
+                <SelectItem value="pubchem">PubChem</SelectItem>
+                <SelectItem value="chembl">ChEMBL</SelectItem>
+                <SelectItem value="drugbank">DrugBank</SelectItem>
+                <SelectItem value="kegg">KEGG Ligand</SelectItem>
+              </SelectContent>
+            </Select>
             <Input
               placeholder="Search by compound name, CID, or SMILES..."
               value={searchQuery}
@@ -427,23 +479,29 @@ const LigandManagement = () => {
               )}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Search across PubChem, ChEMBL (bioactive molecules), DrugBank (FDA-approved drugs), and KEGG (metabolites)
+          </p>
         </div>
       </Card>
 
       {/* Search Results */}
       {searchResults.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-lg font-semibold text-foreground">Search Results</h3>
+          <h3 className="text-lg font-semibold text-foreground">Search Results ({searchResults.length})</h3>
           <div className="grid gap-3 md:grid-cols-2">
-            {searchResults.map((ligand) => (
-              <Card key={ligand.pubchem_cid} className="bg-card p-4 shadow-card transition-all hover:shadow-elevated">
+            {searchResults.map((ligand, index) => (
+              <Card key={`${ligand.source}-${ligand.pubchem_cid}-${index}`} className="bg-card p-4 shadow-card transition-all hover:shadow-elevated">
                 <div className="flex items-start justify-between">
                   <div className="space-y-2 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">CID: {ligand.pubchem_cid}</Badge>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {ligand.source && (
+                        <Badge variant="default" className="text-xs">{ligand.source}</Badge>
+                      )}
+                      <Badge variant="secondary">{ligand.pubchem_cid}</Badge>
                       {ligand.molecular_weight && (
                         <span className="text-xs text-muted-foreground">
-                          MW: {ligand.molecular_weight.toFixed(2)}
+                          MW: {typeof ligand.molecular_weight === 'number' ? ligand.molecular_weight.toFixed(2) : ligand.molecular_weight}
                         </span>
                       )}
                     </div>
