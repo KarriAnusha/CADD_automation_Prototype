@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Activity, PlayCircle, Download, Loader2, TrendingDown } from "lucide-react";
+import { Activity, PlayCircle, Download, Loader2, TrendingDown, ArrowRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,7 +33,11 @@ interface DockingResult {
   ligand_efficiency?: number;
 }
 
-const DockingAnalysis = () => {
+interface DockingAnalysisProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const DockingAnalysis = ({ onNavigate }: DockingAnalysisProps) => {
   const [proteins, setProteins] = useState<any[]>([]);
   const [ligands, setLigands] = useState<any[]>([]);
   const [results, setResults] = useState<DockingResult[]>([]);
@@ -587,6 +591,16 @@ const DockingAnalysis = () => {
           </div>
         </div>
       </Card>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("diagrams")} className="gap-2">
+            Next: 2D Diagrams
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

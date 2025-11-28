@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Play, Pause, RotateCw, Trash2, Clock, CheckCircle2, XCircle,
-  Loader2, Database, Beaker, FlaskConical, AlertTriangle
+  Loader2, Database, Beaker, FlaskConical, AlertTriangle, ArrowRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,7 +52,11 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-const BatchProcessing = () => {
+interface BatchProcessingProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const BatchProcessing = ({ onNavigate }: BatchProcessingProps) => {
   const [jobs, setJobs] = useState<BatchJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newJobType, setNewJobType] = useState<string>("ligand_import");
@@ -501,6 +505,16 @@ const BatchProcessing = () => {
           </p>
         </Card>
       </div>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("results")} className="gap-2">
+            Next: Results Dashboard
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
