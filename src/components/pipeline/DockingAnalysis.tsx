@@ -181,28 +181,32 @@ const DockingAnalysis = ({ onNavigate }: DockingAnalysisProps) => {
     const props = calculateMolecularProperties(ligand);
     const mw = ligand.molecular_weight || 400;
     
-    // Base score influenced by molecular properties
-    let baseScore = -6.0; // Average binding score
+    // Base score influenced by molecular properties (realistic range: -5 to -9 kcal/mol)
+    let baseScore = -6.5; // Average binding score for drug-like molecules
     
-    // Better Lipinski compliance = better binding
-    baseScore -= (props.lipinskiScore * 2.0);
+    // Better Lipinski compliance = better binding (max ~1.5 improvement)
+    baseScore -= (props.lipinskiScore * 1.5);
     
     // Flexibility affects binding (too flexible is bad)
-    baseScore += props.flexibilityPenalty * 0.3;
+    baseScore += props.flexibilityPenalty * 0.2;
     
-    // PSA affects binding
-    baseScore -= (props.psaScore * 1.0);
+    // PSA affects binding (optimal PSA gives ~0.5 improvement)
+    baseScore -= (props.psaScore * 0.5);
     
-    // LogP affects binding (moderate lipophilicity is good)
+    // LogP affects binding (moderate lipophilicity is good, ~0.5 improvement)
     const logPOptimality = 1.0 - Math.abs(props.estimatedLogP - 2.5) / 5.0;
-    baseScore -= (logPOptimality * 1.5);
+    baseScore -= (logPOptimality * 0.5);
     
-    // Add some realistic variance
+    // Add realistic variance (±1.0 kcal/mol)
     const variance = (Math.random() - 0.5) * 2.0;
     const finalScore = baseScore + variance;
     
-    const dockingScore = Math.max(-12, Math.min(-3, finalScore));
-    const bindingAffinity = finalScore * 1.36; // kcal/mol
+    // Clamp docking score to realistic range (-4 to -11 kcal/mol)
+    const dockingScore = Math.max(-11, Math.min(-4, finalScore));
+    
+    // Binding affinity (ΔG) is essentially the docking score with slight variation
+    // Real ΔG values range from about -3 to -12 kcal/mol for typical drug candidates
+    const bindingAffinity = dockingScore + (Math.random() - 0.5) * 0.5;
     
     // Calculate pKd from binding affinity using ΔG = -RT ln(Kd)
     // ΔG = binding affinity (kcal/mol), R = 0.001987 kcal/(mol·K), T = 298K
@@ -212,28 +216,25 @@ const DockingAnalysis = ({ onNavigate }: DockingAnalysisProps) => {
     const pKd = -Math.log10(Kd);
     
     // Calculate pKi (assuming competitive inhibition, Ki ≈ Kd with correction factor)
-    // Ki typically correlates with Kd but includes enzyme-specific factors
     const correctionFactor = 0.8 + Math.random() * 0.4; // 0.8-1.2 factor
     const Ki = Kd * correctionFactor;
     const pKi = -Math.log10(Ki);
     
-    // Ligand Efficiency (LE) = ΔG / heavy atom count
-    // Heavy atoms estimated from molecular weight (avg heavy atom ~12-15 Da)
+    // Ligand Efficiency (LE) = |ΔG| / heavy atom count (typical range: 0.3-0.5)
     const heavyAtomCount = Math.round(mw / 13);
     const ligandEfficiency = Math.abs(bindingAffinity) / heavyAtomCount;
     
-    // Log Association Constant (logKa) - inverse of Kd
-    // Ka = 1/Kd, logKa = -logKd = pKd (in M⁻¹)
+    // Log Association Constant (logKa) = -log(Kd) = pKd
     const Ka = 1 / Kd;
     const logKa = Math.log10(Ka);
     
     return {
       dockingScore,
-      bindingAffinity,
+      bindingAffinity: Math.max(-12, Math.min(-3, bindingAffinity)), // Clamp to realistic range
       rmsd: 0.5 + Math.random() * 2.0, // 0.5-2.5 Å
-      pKd: Math.max(3, Math.min(12, pKd)), // Realistic range 3-12
-      pKi: Math.max(3, Math.min(12, pKi)),
-      logKa: Math.max(3, Math.min(12, logKa)),
+      pKd: Math.max(5, Math.min(10, pKd)), // Realistic drug range 5-10
+      pKi: Math.max(5, Math.min(10, pKi)),
+      logKa: Math.max(5, Math.min(10, logKa)),
       ligandEfficiency,
       molecularProperties: props,
     };
