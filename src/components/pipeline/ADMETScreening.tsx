@@ -234,23 +234,122 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
         const batch = ligands.slice(i, Math.min(i + batchSizeLocal, ligands.length));
 
         const admetResults = batch.map((ligand) => {
-          const absorption = Math.random() * 40 + 60;
-          const distribution = Math.random() * 40 + 60;
-          const metabolism = Math.random() * 40 + 60;
-          const excretion = Math.random() * 40 + 60;
-          const toxicity = Math.random() * 40 + 60;
-          const overall = (absorption + distribution + metabolism + excretion + toxicity) / 5;
+          // Deterministic hash based on ligand properties for consistent results
+          const deterministicHash = (str: string, seed: number = 0): number => {
+            let hash = seed;
+            for (let i = 0; i < str.length; i++) {
+              hash = ((hash << 5) - hash) + str.charCodeAt(i);
+              hash = hash & hash;
+            }
+            return Math.abs(hash);
+          };
+
+          const hashBase = `${ligand.id}-${ligand.pubchem_cid}-${ligand.name}`;
+          
+          // Get molecular properties for scoring (use defaults if not available)
+          const mw = ligand.molecular_weight || 300;
+          const smiles = ligand.smiles || '';
+          
+          // Calculate property-based scores with realistic ranges and thresholds
+          
+          // ABSORPTION: Based on molecular weight, TPSA proxy, and lipophilicity
+          // Lipinski: MW < 500, good absorption 200-450
+          let absorptionScore = 100;
+          if (mw > 500) absorptionScore -= 40;
+          else if (mw > 450) absorptionScore -= 20;
+          else if (mw < 150) absorptionScore -= 15;
+          // Penalize very long SMILES (proxy for complexity/TPSA)
+          if (smiles.length > 100) absorptionScore -= 25;
+          else if (smiles.length > 80) absorptionScore -= 15;
+          // Add deterministic variation
+          const absHash = deterministicHash(hashBase, 1) % 30;
+          absorptionScore = Math.max(20, Math.min(100, absorptionScore - absHash + 15));
+
+          // DISTRIBUTION: Based on size, ring count, and charge indicators
+          let distributionScore = 100;
+          // Large molecules have poor distribution
+          if (mw > 450) distributionScore -= 30;
+          else if (mw > 350) distributionScore -= 15;
+          // Count rings (proxy from SMILES)
+          const ringCount = (smiles.match(/[0-9]/g) || []).length / 2;
+          if (ringCount > 5) distributionScore -= 25;
+          else if (ringCount > 3) distributionScore -= 10;
+          // Charged groups affect BBB penetration
+          const hasChargedGroups = /[+\-]/.test(smiles) || /N\+|O\-/.test(smiles);
+          if (hasChargedGroups) distributionScore -= 20;
+          const distHash = deterministicHash(hashBase, 2) % 25;
+          distributionScore = Math.max(15, Math.min(100, distributionScore - distHash + 12));
+
+          // METABOLISM: Based on metabolic liability indicators
+          let metabolismScore = 100;
+          // CYP450 liability - aromatic amines, certain functional groups
+          const hasAromaticAmine = /c.*N|n.*c/i.test(smiles);
+          if (hasAromaticAmine) metabolismScore -= 25;
+          // Ester/amide bonds susceptible to hydrolysis
+          const hasEster = /C\(=O\)O|OC\(=O\)/i.test(smiles);
+          if (hasEster) metabolismScore -= 15;
+          // Too many rotatable bonds = flexible = metabolically unstable
+          const rotatableBonds = (smiles.match(/-/g) || []).length;
+          if (rotatableBonds > 10) metabolismScore -= 20;
+          const metabHash = deterministicHash(hashBase, 3) % 30;
+          metabolismScore = Math.max(20, Math.min(100, metabolismScore - metabHash + 15));
+
+          // EXCRETION: Based on molecular weight and polarity indicators
+          let excretionScore = 100;
+          // Very large molecules have poor renal clearance
+          if (mw > 500) excretionScore -= 35;
+          else if (mw > 400) excretionScore -= 20;
+          // Highly lipophilic compounds accumulate
+          const logPProxy = smiles.length / 10 - (smiles.match(/O|N|S/gi) || []).length;
+          if (logPProxy > 5) excretionScore -= 25;
+          else if (logPProxy > 3) excretionScore -= 10;
+          const excrHash = deterministicHash(hashBase, 4) % 25;
+          excretionScore = Math.max(20, Math.min(100, excretionScore - excrHash + 12));
+
+          // TOXICITY: Based on structural alerts
+          let toxicityScore = 100; // Higher = safer (less toxic)
+          // PAINS-like alerts
+          const hasNitro = /N\(=O\)=O|\[N\+\]\(\[O\-\]\)=O/i.test(smiles);
+          if (hasNitro) toxicityScore -= 40;
+          // Reactive groups
+          const hasAldehyde = /C=O[^O]|CHO/i.test(smiles);
+          if (hasAldehyde) toxicityScore -= 20;
+          // Halogen alerts (especially iodine, bromine)
+          const hasHeavyHalogen = /Br|I/i.test(smiles);
+          if (hasHeavyHalogen) toxicityScore -= 15;
+          // Epoxide
+          const hasEpoxide = /C1OC1/i.test(smiles);
+          if (hasEpoxide) toxicityScore -= 30;
+          const toxHash = deterministicHash(hashBase, 5) % 25;
+          toxicityScore = Math.max(10, Math.min(100, toxicityScore - toxHash + 12));
+
+          // Calculate overall score with weighted average
+          const overall = (
+            absorptionScore * 0.2 + 
+            distributionScore * 0.2 + 
+            metabolismScore * 0.2 + 
+            excretionScore * 0.15 + 
+            toxicityScore * 0.25  // Toxicity weighted higher
+          );
+
+          // Pass criteria: overall >= 60 AND no individual score below 40
+          const passed = overall >= 60 && 
+            absorptionScore >= 40 && 
+            distributionScore >= 40 && 
+            metabolismScore >= 40 && 
+            excretionScore >= 40 && 
+            toxicityScore >= 45;  // Stricter toxicity threshold
           
           return {
             user_id: user.id,
             ligand_id: ligand.id,
-            absorption_score: absorption,
-            distribution_score: distribution,
-            metabolism_score: metabolism,
-            excretion_score: excretion,
-            toxicity_score: toxicity,
-            overall_score: overall,
-            passed_screening: overall >= 70,
+            absorption_score: Math.round(absorptionScore * 10) / 10,
+            distribution_score: Math.round(distributionScore * 10) / 10,
+            metabolism_score: Math.round(metabolismScore * 10) / 10,
+            excretion_score: Math.round(excretionScore * 10) / 10,
+            toxicity_score: Math.round(toxicityScore * 10) / 10,
+            overall_score: Math.round(overall * 10) / 10,
+            passed_screening: passed,
           };
         });
 
