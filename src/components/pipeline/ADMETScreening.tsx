@@ -140,7 +140,7 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
           pubchem_cid
         )
       `)
-      .order("overall_score", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error fetching results:", error);
