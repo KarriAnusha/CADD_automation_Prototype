@@ -162,19 +162,19 @@ const Atom3D = ({
 
   return (
     <group position={position}>
+      {/* Outer edge for better visibility */}
+      <mesh scale={isHovered ? 1.35 : 1.05}>
+        <sphereGeometry args={[radius, 32, 32]} />
+        <meshBasicMaterial color="#000000" transparent opacity={0.3} />
+      </mesh>
+      {/* Main atom sphere */}
       <mesh 
         ref={meshRef}
         onPointerOver={onHover}
         onPointerOut={onLeave}
       >
         <sphereGeometry args={[radius, 32, 32]} />
-        <meshPhongMaterial 
-          color={color}
-          shininess={80}
-          specular="#ffffff"
-          emissive={color}
-          emissiveIntensity={isHovered ? 0.2 : 0}
-        />
+        <meshBasicMaterial color={color} />
       </mesh>
       {isHovered && (
         <Html position={[0, radius + 0.3, 0]} center>
