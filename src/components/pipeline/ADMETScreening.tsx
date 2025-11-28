@@ -232,14 +232,23 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
     }
   };
 
-  const filteredResults = results.filter((result) => {
+  // Deduplicate results by ligand_id (keep first occurrence which is latest due to ordering)
+  const uniqueResultsMap = new Map<string, ADMETResult>();
+  results.forEach((result) => {
+    if (!uniqueResultsMap.has(result.ligand_id)) {
+      uniqueResultsMap.set(result.ligand_id, result);
+    }
+  });
+  const uniqueResults = Array.from(uniqueResultsMap.values());
+
+  const filteredResults = uniqueResults.filter((result) => {
     if (filterStatus === "passed") return result.passed_screening;
     if (filterStatus === "failed") return !result.passed_screening;
     return true;
   });
 
-  const passedCount = results.filter((r) => r.passed_screening).length;
-  const failedCount = results.filter((r) => !r.passed_screening).length;
+  const passedCount = uniqueResults.filter((r) => r.passed_screening).length;
+  const failedCount = uniqueResults.filter((r) => !r.passed_screening).length;
 
   return (
     <div className="space-y-6">
@@ -424,9 +433,9 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              <p className="text-sm font-medium text-muted-foreground">Total Screened</p>
+              <p className="text-sm font-medium text-muted-foreground">Unique Ligands Screened</p>
             </div>
-            <p className="text-3xl font-bold text-foreground">{results.length}</p>
+            <p className="text-3xl font-bold text-foreground">{uniqueResults.length}</p>
             <p className="text-xs text-muted-foreground">Complete analysis</p>
           </div>
         </Card>
