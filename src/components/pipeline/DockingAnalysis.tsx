@@ -70,23 +70,37 @@ const DockingAnalysis = ({ onNavigate }: DockingAnalysisProps) => {
     const { data, error } = await supabase
       .from("admet_results")
       .select(`
+        ligand_id,
+        created_at,
+        passed_screening,
         ligands (
           id,
           name,
           pubchem_cid,
-          selected
+          selected,
+          molecular_weight,
+          smiles
         )
       `)
-      .eq("passed_screening", true);
+      .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error fetching ligands:", error);
       return;
     }
 
-    const qualifiedLigands = (data || [])
-      .map((item: any) => item.ligands)
-      .filter((ligand: any) => ligand !== null);
+    // Deduplicate by ligand_id, keeping only the latest ADMET result per ligand
+    const latestByLigand = new Map<string, any>();
+    (data || []).forEach((item: any) => {
+      if (item.ligands && !latestByLigand.has(item.ligand_id)) {
+        latestByLigand.set(item.ligand_id, item);
+      }
+    });
+
+    // Filter to only ligands that passed their latest ADMET screening
+    const qualifiedLigands = Array.from(latestByLigand.values())
+      .filter((item: any) => item.passed_screening)
+      .map((item: any) => item.ligands);
 
     setLigands(qualifiedLigands);
   };
