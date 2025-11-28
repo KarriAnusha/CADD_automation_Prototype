@@ -127,7 +127,17 @@ const DockingAnalysis = ({ onNavigate }: DockingAnalysisProps) => {
       return;
     }
 
-    const formattedResults = (data || []).map((result: any) => {
+    // Deduplicate by protein_id + ligand_id, keeping the best (lowest) docking score
+    const bestByPair = new Map<string, any>();
+    (data || []).forEach((result: any) => {
+      const key = `${result.protein_id}-${result.ligand_id}`;
+      if (!bestByPair.has(key)) {
+        bestByPair.set(key, result);
+      }
+      // Since results are ordered by docking_score ASC, first occurrence is best
+    });
+
+    const formattedResults = Array.from(bestByPair.values()).map((result: any) => {
       const poseData = result.pose_data || {};
       return {
         id: result.id,
