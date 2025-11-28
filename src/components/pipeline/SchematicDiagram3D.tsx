@@ -168,12 +168,12 @@ const Atom3D = ({
         onPointerOut={onLeave}
       >
         <sphereGeometry args={[radius, 32, 32]} />
-        <meshStandardMaterial 
+        <meshPhongMaterial 
           color={color}
-          metalness={0.3}
-          roughness={0.4}
+          shininess={80}
+          specular="#ffffff"
           emissive={color}
-          emissiveIntensity={isHovered ? 0.3 : 0.05}
+          emissiveIntensity={isHovered ? 0.2 : 0}
         />
       </mesh>
       {isHovered && (
