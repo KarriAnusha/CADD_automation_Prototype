@@ -220,7 +220,16 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
       const admetMap = new Map(admetRes.data?.map((a) => [a.ligand_id, a]) || []);
       const interactionMap = new Map(interactionRes.data?.map((i) => [i.docking_result_id, i.interaction_analysis]) || []);
 
-      const compounds: TopCompound[] = topResults?.map((result: any) => {
+      // Deduplicate by ligand_id, keeping only the best (lowest) docking score per compound
+      const seenLigands = new Set<string>();
+      const uniqueResults = topResults?.filter((result: any) => {
+        const ligandId = result.ligands?.id;
+        if (!ligandId || seenLigands.has(ligandId)) return false;
+        seenLigands.add(ligandId);
+        return true;
+      }) || [];
+
+      const compounds: TopCompound[] = uniqueResults.map((result: any) => {
         const admet = admetMap.get(result.ligands?.id);
         const interaction = interactionMap.get(result.id) as any;
         return {
@@ -244,7 +253,7 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
           passed_admet: admet?.passed_screening,
           interaction_count: interaction?.summary?.total_interactions || 0,
         };
-      }) || [];
+      });
 
       setTopCompounds(compounds);
     } catch (error) {
