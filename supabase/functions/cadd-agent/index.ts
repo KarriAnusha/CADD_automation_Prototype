@@ -387,63 +387,108 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
   switch (toolName) {
     case "search_proteins":
       try {
-        // Search RCSB PDB using their search API
-        const searchQuery = {
-          query: {
-            type: "terminal",
-            service: "text",
-            parameters: {
-              value: args.query
-            }
-          },
-          return_type: "entry",
-          request_options: {
-            results_content_type: ["experimental"],
-            return_all_hits: false
+        // Clean the query - extract just the PDB ID if it looks like one
+        let cleanQuery = args.query.trim();
+        
+        // Extract PDB ID if query contains pipe or special characters
+        if (cleanQuery.includes('|')) {
+          cleanQuery = cleanQuery.split('|')[0].trim();
+        }
+        
+        // Check if it's a direct PDB ID (4 characters, alphanumeric)
+        const pdbIdPattern = /^[0-9A-Za-z]{4}$/;
+        const isPdbId = pdbIdPattern.test(cleanQuery);
+        
+        let pdbIds: string[] = [];
+        
+        if (isPdbId) {
+          // Direct PDB ID lookup - verify it exists
+          console.log(`Direct PDB ID lookup: ${cleanQuery}`);
+          const directResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${cleanQuery.toUpperCase()}`);
+          if (directResponse.ok) {
+            pdbIds = [cleanQuery.toUpperCase()];
+          } else {
+            console.log(`PDB ID ${cleanQuery} not found, trying search`);
           }
-        };
+        }
+        
+        // If not a direct ID or direct lookup failed, use search API
+        if (pdbIds.length === 0) {
+          const searchQuery = {
+            query: {
+              type: "terminal",
+              service: "full_text",
+              parameters: {
+                value: cleanQuery
+              }
+            },
+            return_type: "entry",
+            request_options: {
+              paginate: {
+                start: 0,
+                rows: args.limit || 10
+              }
+            }
+          };
 
-        const searchResponse = await fetch('https://search.rcsb.org/rcsbsearch/v2/query', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(searchQuery)
-        });
+          console.log('Searching PDB with query:', cleanQuery);
+          const searchResponse = await fetch('https://search.rcsb.org/rcsbsearch/v2/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(searchQuery)
+          });
 
-        if (!searchResponse.ok) {
-          throw new Error('PDB search failed');
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            pdbIds = searchData.result_set?.slice(0, args.limit || 10).map((r: any) => r.identifier) || [];
+          } else {
+            const errorText = await searchResponse.text();
+            console.error('PDB search API error:', searchResponse.status, errorText);
+          }
         }
 
-        const searchData = await searchResponse.json();
-        const pdbIds = searchData.result_set?.slice(0, args.limit || 5).map((r: any) => r.identifier) || [];
+        if (pdbIds.length === 0) {
+          return {
+            results: [],
+            message: `No proteins found for "${cleanQuery}". Try a protein name like "kinase" or a valid PDB ID like "6XHU".`
+          };
+        }
 
         // Fetch details for each PDB ID
         const results = await Promise.all(
           pdbIds.map(async (pdbId: string) => {
-            const detailResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId}`);
-            if (!detailResponse.ok) return null;
-            
-            const detail = await detailResponse.json();
-            return {
-              pdb_id: pdbId.toUpperCase(),
-              name: detail.struct?.title || pdbId,
-              description: detail.struct?.pdbx_descriptor || '',
-              resolution: detail.rcsb_entry_info?.resolution_combined?.[0] || null,
-              organism: detail.rcsb_entry_container_identifiers?.source_organism_names?.[0] || 'Unknown',
-              method: detail.exptl?.[0]?.method || 'X-RAY DIFFRACTION'
-            };
+            try {
+              const detailResponse = await fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId}`);
+              if (!detailResponse.ok) return null;
+              
+              const detail = await detailResponse.json();
+              return {
+                pdb_id: pdbId.toUpperCase(),
+                name: detail.struct?.title || pdbId,
+                description: detail.struct?.pdbx_descriptor || '',
+                resolution: detail.rcsb_entry_info?.resolution_combined?.[0] || 
+                           detail.refine?.[0]?.ls_d_res_high || null,
+                organism: detail.rcsb_entity_source_organism?.[0]?.ncbi_scientific_name ||
+                         detail.rcsb_entry_container_identifiers?.source_organism_names?.[0] || 'Unknown',
+                method: detail.exptl?.[0]?.method || 'X-RAY DIFFRACTION'
+              };
+            } catch (e) {
+              console.error(`Error fetching details for ${pdbId}:`, e);
+              return null;
+            }
           })
         );
 
         const validResults = results.filter(r => r !== null);
         return {
           results: validResults,
-          message: `Found ${validResults.length} proteins from RCSB PDB matching "${args.query}".`
+          message: `Found ${validResults.length} proteins from RCSB PDB matching "${cleanQuery}".`
         };
       } catch (error) {
         console.error('PDB API error:', error);
         return {
           results: [],
-          message: `Error searching PDB: ${error instanceof Error ? error.message : 'Unknown error'}`
+          message: `Error searching PDB: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`
         };
       }
 
