@@ -9,12 +9,13 @@ import { supabase } from "@/integrations/supabase/client";
 import * as THREE from "three";
 
 interface Interaction {
-  type: "hydrogen_bond" | "hydrophobic" | "pi_stacking" | "ionic" | "halogen_bond";
+  type: "hydrogen_bond" | "hydrophobic" | "pi_stacking" | "ionic" | "halogen_bond" | "metal_coordination";
   residue: string;
   residuePosition: number;
   distance: number;
   angle?: number;
   strength: "strong" | "medium" | "weak";
+  atomLabel?: string;
 }
 
 interface InteractionDiagram3DProps {
@@ -33,14 +34,28 @@ const interactionColors = {
   pi_stacking: "#a855f7",
   ionic: "#ef4444",
   halogen_bond: "#eab308",
+  metal_coordination: "#06b6d4",
 };
 
 const interactionLabels = {
   hydrogen_bond: "H-Bond",
   hydrophobic: "Hydrophobic",
   pi_stacking: "π-π Stacking",
-  ionic: "Ionic",
+  ionic: "Salt Bridge",
   halogen_bond: "Halogen Bond",
+  metal_coordination: "Metal Coord.",
+};
+
+const atomColors: Record<string, string> = {
+  C: "#666666",
+  N: "#3b82f6",
+  O: "#ef4444",
+  S: "#eab308",
+  P: "#f97316",
+  Fe: "#b45309",
+  Zn: "#71717a",
+  Mg: "#22c55e",
+  Ca: "#84cc16",
 };
 
 // Generate simulated interactions
@@ -49,19 +64,22 @@ const generateInteractions = (ligandCid: string, pdbId: string): Interaction[] =
   const random = (i: number) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280;
 
   const residues = ["ASP", "GLU", "LYS", "ARG", "HIS", "SER", "THR", "ASN", "GLN", "TYR", "PHE", "TRP", "LEU", "ILE", "VAL"];
-  const interactionTypes: Interaction["type"][] = ["hydrogen_bond", "hydrophobic", "pi_stacking", "ionic", "halogen_bond"];
+  const interactionTypes: Interaction["type"][] = ["hydrogen_bond", "hydrophobic", "pi_stacking", "ionic", "halogen_bond", "metal_coordination"];
+  const atoms = ["N", "O", "C", "S", "Fe", "Zn"];
 
   const numInteractions = Math.floor(random(0) * 8) + 5;
   const interactions: Interaction[] = [];
 
   for (let i = 0; i < numInteractions; i++) {
+    const type = interactionTypes[Math.floor(random(i + 1) * interactionTypes.length)];
     interactions.push({
-      type: interactionTypes[Math.floor(random(i + 1) * interactionTypes.length)],
+      type,
       residue: residues[Math.floor(random(i + 2) * residues.length)],
       residuePosition: Math.floor(random(i + 3) * 300) + 50,
       distance: parseFloat((2.0 + random(i + 4) * 2.5).toFixed(2)),
       angle: Math.floor(random(i + 5) * 60) + 120,
       strength: random(i + 6) > 0.6 ? "strong" : random(i + 6) > 0.3 ? "medium" : "weak",
+      atomLabel: type === "metal_coordination" ? atoms[Math.floor(random(i + 7) * 2) + 4] : atoms[Math.floor(random(i + 7) * 4)],
     });
   }
 
@@ -105,15 +123,18 @@ const ResidueNode = ({
   isHovered,
   onHover,
   onLeave,
+  showDistance,
 }: { 
   interaction: Interaction; 
   position: [number, number, number];
   isHovered: boolean;
   onHover: () => void;
   onLeave: () => void;
+  showDistance: boolean;
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const color = interactionColors[interaction.type];
+  const atomColor = interaction.atomLabel ? atomColors[interaction.atomLabel] || color : color;
   
   useFrame(() => {
     if (meshRef.current && isHovered) {
@@ -125,6 +146,7 @@ const ResidueNode = ({
 
   return (
     <group position={position}>
+      {/* Atom sphere with element-specific coloring */}
       <mesh 
         ref={meshRef}
         onPointerOver={onHover}
@@ -132,24 +154,47 @@ const ResidueNode = ({
       >
         <sphereGeometry args={[0.5, 24, 24]} />
         <meshStandardMaterial 
-          color={color} 
-          emissive={color}
+          color={atomColor} 
+          emissive={atomColor}
           emissiveIntensity={isHovered ? 0.5 : 0.1}
         />
       </mesh>
-      <Html position={[0, 0.8, 0]} center>
+      {/* Atom label on sphere */}
+      {interaction.atomLabel && (
+        <Html position={[0, 0, 0]} center>
+          <div className="text-[8px] font-bold text-white drop-shadow-md pointer-events-none">
+            {interaction.atomLabel}
+          </div>
+        </Html>
+      )}
+      {/* Residue name/number label */}
+      <Html position={[0, 0.9, 0]} center>
         <div className={`text-center bg-background/90 px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap transition-all ${isHovered ? 'scale-110' : ''}`}>
           <div className="font-semibold" style={{ color }}>{interaction.residue}</div>
           <div className="text-muted-foreground">{interaction.residuePosition}</div>
         </div>
       </Html>
+      {/* Distance label (optional) */}
+      {showDistance && (
+        <Html position={[position[0] * -0.3, position[1] * -0.3, position[2] * -0.3]} center>
+          <div className="text-[9px] text-muted-foreground bg-background/70 px-1 rounded">
+            {interaction.distance}Å
+          </div>
+        </Html>
+      )}
+      {/* Hover tooltip with full details */}
       {isHovered && (
-        <Html position={[0, 1.5, 0]} center>
-          <div className="bg-popover border border-border px-2 py-1.5 rounded shadow-lg text-xs min-w-[120px]">
+        <Html position={[0, 1.8, 0]} center>
+          <div className="bg-popover border border-border px-2 py-1.5 rounded shadow-lg text-xs min-w-[140px]">
             <div className="font-semibold text-foreground">{interaction.residue}{interaction.residuePosition}</div>
-            <div className="text-muted-foreground">{interactionLabels[interaction.type]}</div>
-            <div className="text-muted-foreground">{interaction.distance}Å</div>
-            <div className="text-muted-foreground capitalize">{interaction.strength}</div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+              <span className="text-muted-foreground">{interactionLabels[interaction.type]}</span>
+            </div>
+            <div className="text-muted-foreground">Distance: {interaction.distance}Å</div>
+            {interaction.angle && <div className="text-muted-foreground">Angle: {interaction.angle}°</div>}
+            {interaction.atomLabel && <div className="text-muted-foreground">Atom: {interaction.atomLabel}</div>}
+            <div className="text-muted-foreground capitalize">Strength: {interaction.strength}</div>
           </div>
         </Html>
       )}
@@ -212,12 +257,14 @@ const Scene = ({
   ligandCid,
   hoveredIndex,
   setHoveredIndex,
+  showDistances,
 }: { 
   interactions: Interaction[];
   ligandName: string;
   ligandCid: string;
   hoveredIndex: number | null;
   setHoveredIndex: (index: number | null) => void;
+  showDistances: boolean;
 }) => {
   // Calculate 3D positions for residues in a sphere around the ligand
   const residuePositions = useMemo(() => {
@@ -256,6 +303,7 @@ const Scene = ({
             isHovered={hoveredIndex === index}
             onHover={() => setHoveredIndex(index)}
             onLeave={() => setHoveredIndex(null)}
+            showDistance={showDistances}
           />
         </group>
       ))}
@@ -286,6 +334,7 @@ const InteractionDiagram3D = ({
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showDistances, setShowDistances] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Fetch interaction data
@@ -402,6 +451,13 @@ const InteractionDiagram3D = ({
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline">{bindingAffinity.toFixed(2)} kcal/mol</Badge>
+            <Button 
+              variant={showDistances ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setShowDistances(!showDistances)}
+            >
+              Distances
+            </Button>
             <Button variant="outline" size="icon" onClick={toggleFullscreen}>
               <Maximize2 className="h-4 w-4" />
             </Button>
@@ -416,6 +472,7 @@ const InteractionDiagram3D = ({
               ligandCid={ligandCid}
               hoveredIndex={hoveredIndex}
               setHoveredIndex={setHoveredIndex}
+              showDistances={showDistances}
             />
           </Canvas>
           <div className="absolute bottom-3 left-3 text-xs text-white/60 bg-black/30 px-2 py-1 rounded">
@@ -437,7 +494,7 @@ const InteractionDiagram3D = ({
         </div>
 
         {/* Interaction summary */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
           {Object.entries(interactionLabels).map(([type, label]) => {
             const count = interactions.filter(i => i.type === type).length;
             return (
