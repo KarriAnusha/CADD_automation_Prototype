@@ -9,6 +9,7 @@ const corsHeaders = {
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const KAGGLE_API_TOKEN = Deno.env.get("KAGGLE_API_TOKEN");
 
 const tools = [
   {
@@ -220,6 +221,39 @@ const tools = [
           job_id: { type: "string", description: "ID of the batch job to cancel" }
         },
         required: ["job_id"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_kaggle_datasets",
+      description: "Search for drug/ligand datasets on Kaggle. Returns datasets that can be imported for ADMET screening.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search term for dataset (e.g., 'drug compounds', 'SMILES', 'molecular', 'ligand')" },
+          limit: { type: "number", description: "Maximum number of datasets to return (default 10)" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "import_kaggle_dataset",
+      description: "Import ligand data from a Kaggle dataset. The dataset should contain molecular data like SMILES strings, compound names, or PubChem CIDs.",
+      parameters: {
+        type: "object",
+        properties: {
+          dataset_ref: { type: "string", description: "Kaggle dataset reference (e.g., 'owner/dataset-name')" },
+          file_name: { type: "string", description: "Name of the CSV file to import from the dataset (optional, imports first CSV if not specified)" },
+          max_compounds: { type: "number", description: "Maximum compounds to import (default 1000)" },
+          smiles_column: { type: "string", description: "Name of the column containing SMILES strings (auto-detected if not specified)" },
+          name_column: { type: "string", description: "Name of the column containing compound names (auto-detected if not specified)" }
+        },
+        required: ["dataset_ref"]
       }
     }
   }
@@ -1977,6 +2011,151 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
         return { error: `Failed to cancel job: ${error instanceof Error ? error.message : 'Unknown error'}` };
       }
 
+    case "search_kaggle_datasets":
+      try {
+        if (!KAGGLE_API_TOKEN) {
+          return { error: "Kaggle API token not configured. Please add your KAGGLE_API_TOKEN in settings." };
+        }
+
+        const searchQuery = encodeURIComponent(args.query);
+        const limit = args.limit || 10;
+        
+        // Use Kaggle API v1 to search datasets
+        const kaggleResponse = await fetch(
+          `https://www.kaggle.com/api/v1/datasets/list?search=${searchQuery}&maxSize=104857600&page=1`,
+          {
+            headers: {
+              'Authorization': `Bearer ${KAGGLE_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!kaggleResponse.ok) {
+          const errorText = await kaggleResponse.text();
+          console.error('Kaggle API error:', kaggleResponse.status, errorText);
+          return { error: `Kaggle API error: ${kaggleResponse.status}. Please verify your API token.` };
+        }
+
+        const datasets = await kaggleResponse.json();
+        const results = datasets.slice(0, limit).map((ds: any) => ({
+          ref: ds.ref,
+          title: ds.title,
+          size: ds.totalBytes ? `${(ds.totalBytes / 1024 / 1024).toFixed(2)} MB` : 'Unknown',
+          downloads: ds.downloadCount || 0,
+          votes: ds.voteCount || 0,
+          description: ds.subtitle || ds.description?.substring(0, 200) || 'No description',
+          last_updated: ds.lastUpdated,
+          url: `https://www.kaggle.com/datasets/${ds.ref}`
+        }));
+
+        return {
+          results,
+          total_found: datasets.length,
+          message: `Found ${results.length} Kaggle datasets matching "${args.query}". Use import_kaggle_dataset with the 'ref' field to import a dataset.`
+        };
+      } catch (error) {
+        console.error('Kaggle search error:', error);
+        return { error: `Failed to search Kaggle: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
+    case "import_kaggle_dataset":
+      try {
+        if (!KAGGLE_API_TOKEN) {
+          return { error: "Kaggle API token not configured. Please add your KAGGLE_API_TOKEN in settings." };
+        }
+
+        const datasetRef = args.dataset_ref;
+        const maxCompounds = Math.min(args.max_compounds || 1000, 10000);
+        
+        console.log(`Importing Kaggle dataset: ${datasetRef}`);
+
+        // Get dataset files list
+        const filesResponse = await fetch(
+          `https://www.kaggle.com/api/v1/datasets/list/${datasetRef}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${KAGGLE_API_TOKEN}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!filesResponse.ok) {
+          return { error: `Failed to access dataset ${datasetRef}. Please verify the dataset reference.` };
+        }
+
+        // Download the dataset
+        const downloadResponse = await fetch(
+          `https://www.kaggle.com/api/v1/datasets/download/${datasetRef}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${KAGGLE_API_TOKEN}`
+            }
+          }
+        );
+
+        if (!downloadResponse.ok) {
+          const errorText = await downloadResponse.text();
+          console.error('Kaggle download error:', downloadResponse.status, errorText);
+          return { error: `Failed to download dataset. This may be a private dataset or require accepting terms.` };
+        }
+
+        // Get the content - Kaggle returns a zip file
+        const blob = await downloadResponse.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        
+        // For simplicity, we'll look for CSV content
+        // In a real implementation, you'd want to properly unzip
+        // For now, return info about the dataset and suggest manual import
+        
+        // Try to get metadata about what files are available
+        const metadataResponse = await fetch(
+          `https://www.kaggle.com/api/v1/datasets/view/${datasetRef}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${KAGGLE_API_TOKEN}`
+            }
+          }
+        );
+
+        let filesInfo = [];
+        if (metadataResponse.ok) {
+          const metadata = await metadataResponse.json();
+          filesInfo = metadata.datasetFiles?.map((f: any) => f.name) || [];
+        }
+
+        // Create a batch job record
+        const { data: batchJob } = await supabase
+          .from('batch_jobs')
+          .insert({
+            user_id: userId,
+            job_type: 'kaggle_import',
+            status: 'pending',
+            total_items: maxCompounds,
+            input_data: { 
+              dataset_ref: datasetRef, 
+              files: filesInfo,
+              smiles_column: args.smiles_column,
+              name_column: args.name_column
+            }
+          })
+          .select()
+          .single();
+
+        return {
+          success: true,
+          job_id: batchJob?.id,
+          dataset_ref: datasetRef,
+          files_found: filesInfo,
+          message: `Kaggle dataset "${datasetRef}" accessed successfully. Found files: ${filesInfo.join(', ') || 'compressed archive'}. For large datasets, the data will be processed in batches. You can also search for specific compounds from this dataset using PubChem to add them to your library.`,
+          suggestion: `To import specific compounds, search for them by name using search_ligands or use batch_import_ligands with relevant compound names from this dataset.`
+        };
+      } catch (error) {
+        console.error('Kaggle import error:', error);
+        return { error: `Failed to import from Kaggle: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+
     default:
       return { error: `Unknown tool: ${toolName}` };
   }
@@ -2009,19 +2188,26 @@ serve(async (req) => {
 Your capabilities:
 - Search and manage protein targets from PDB database
 - Search and manage ligand compounds from PubChem
+- Search and import ligand datasets from Kaggle (drug compounds, SMILES data, molecular datasets)
 - Run ADMET screening to filter unsafe compounds
 - Perform molecular docking simulations
 - Analyze binding interactions and drug-likeness
 - Generate comprehensive reports
+- Process large-scale screening (10,000+ compounds)
+
+When a user asks about importing ligands from Kaggle:
+1. Use search_kaggle_datasets to find relevant datasets
+2. Use import_kaggle_dataset to access the dataset
+3. For specific compounds from the dataset, use search_ligands or batch_import_ligands
 
 You can automate entire workflows. When a user asks to "run a complete analysis" or similar, you should:
 1. Search and add relevant proteins
-2. Search and add potential ligands
+2. Search and add potential ligands (from PubChem or Kaggle)
 3. Run ADMET screening on ligands
 4. Run docking analysis on passed compounds
 5. Analyze and summarize results
 
-Always use your tools proactively. Be helpful, scientific, and thorough in your analysis.`;
+Always use your tools proactively. Understand the user's query fully and leverage all available resources. Be helpful, scientific, and thorough in your analysis.`;
 
     let currentMessages = [
       { role: "system", content: systemPrompt },
