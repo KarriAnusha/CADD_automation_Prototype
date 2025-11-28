@@ -125,7 +125,7 @@ const PipelineOverview = ({ onNavigate }: PipelineOverviewProps) => {
                   size="sm"
                   className="gap-2"
                 >
-                  Configure
+                  Continue
                   <ArrowRight className="h-4 w-4" />
                 </Button>
               </div>
