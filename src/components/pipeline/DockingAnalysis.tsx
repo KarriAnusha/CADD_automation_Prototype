@@ -29,6 +29,7 @@ interface DockingResult {
   status: string;
   pKd?: number;
   pKi?: number;
+  logKa?: number;
   ligand_efficiency?: number;
 }
 
@@ -124,6 +125,7 @@ const DockingAnalysis = () => {
         status: result.status,
         pKd: poseData.pKd,
         pKi: poseData.pKi,
+        logKa: poseData.logKa,
         ligand_efficiency: poseData.ligand_efficiency,
       };
     });
@@ -216,12 +218,18 @@ const DockingAnalysis = () => {
     const heavyAtomCount = Math.round(mw / 13);
     const ligandEfficiency = Math.abs(bindingAffinity) / heavyAtomCount;
     
+    // Log Association Constant (logKa) - inverse of Kd
+    // Ka = 1/Kd, logKa = -logKd = pKd (in M⁻¹)
+    const Ka = 1 / Kd;
+    const logKa = Math.log10(Ka);
+    
     return {
       dockingScore,
       bindingAffinity,
       rmsd: 0.5 + Math.random() * 2.0, // 0.5-2.5 Å
       pKd: Math.max(3, Math.min(12, pKd)), // Realistic range 3-12
       pKi: Math.max(3, Math.min(12, pKi)),
+      logKa: Math.max(3, Math.min(12, logKa)),
       ligandEfficiency,
       molecularProperties: props,
     };
@@ -270,6 +278,7 @@ const DockingAnalysis = () => {
               estimated_logp: dockingResult.molecularProperties.estimatedLogP,
               pKd: dockingResult.pKd,
               pKi: dockingResult.pKi,
+              logKa: dockingResult.logKa,
               ligand_efficiency: dockingResult.ligandEfficiency,
             },
           });
@@ -302,7 +311,7 @@ const DockingAnalysis = () => {
 
   const handleExport = () => {
     const csv = [
-      ["Rank", "Protein", "PDB ID", "Ligand", "CID", "Docking Score", "Binding Affinity (kcal/mol)", "pKd", "pKi", "Ligand Efficiency", "RMSD"],
+      ["Rank", "Protein", "PDB ID", "Ligand", "CID", "Docking Score", "Binding Affinity (kcal/mol)", "pKd", "pKi", "logKa", "Ligand Efficiency", "RMSD"],
       ...sortedResults.map((result, index) => [
         index + 1,
         result.protein_name,
@@ -313,6 +322,7 @@ const DockingAnalysis = () => {
         result.binding_affinity.toFixed(2),
         result.pKd?.toFixed(2) || "N/A",
         result.pKi?.toFixed(2) || "N/A",
+        result.logKa?.toFixed(2) || "N/A",
         result.ligand_efficiency?.toFixed(3) || "N/A",
         result.rmsd.toFixed(2),
       ]),
@@ -458,6 +468,7 @@ const DockingAnalysis = () => {
                   <TableHead>Binding Affinity</TableHead>
                   <TableHead>pKd</TableHead>
                   <TableHead>pKi</TableHead>
+                  <TableHead>logKa</TableHead>
                   <TableHead>LE</TableHead>
                   <TableHead>RMSD (Å)</TableHead>
                 </TableRow>
@@ -503,6 +514,11 @@ const DockingAnalysis = () => {
                         </span>
                       </TableCell>
                       <TableCell>
+                        <span className={`font-medium ${result.logKa && result.logKa >= 6 ? "text-success" : "text-foreground"}`}>
+                          {result.logKa?.toFixed(2) || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <span className={`font-medium ${result.ligand_efficiency && result.ligand_efficiency >= 0.3 ? "text-success" : "text-foreground"}`}>
                           {result.ligand_efficiency?.toFixed(3) || "—"}
                         </span>
@@ -516,7 +532,7 @@ const DockingAnalysis = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       No docking results available. Run docking analysis to see results.
                     </TableCell>
                   </TableRow>
@@ -537,8 +553,8 @@ const DockingAnalysis = () => {
         <h4 className="mb-2 font-semibold text-foreground">About Enhanced Docking Simulation</h4>
         <p className="text-sm text-muted-foreground mb-3">
           This enhanced simulation uses realistic molecular property calculations to predict binding affinity. 
-          Includes pKd (dissociation constant), pKi (inhibition constant), and ligand efficiency (LE) metrics.
-          Lower (more negative) docking scores indicate stronger binding; higher pKd/pKi values indicate tighter binding.
+          Includes pKd (dissociation constant), pKi (inhibition constant), logKa (association constant), and ligand efficiency (LE) metrics.
+          Lower (more negative) docking scores indicate stronger binding; higher pKd/pKi/logKa values indicate tighter binding.
         </p>
         <div className="grid gap-2 text-xs text-muted-foreground">
           <div className="flex items-start gap-2">
@@ -548,6 +564,10 @@ const DockingAnalysis = () => {
           <div className="flex items-start gap-2">
             <span className="font-semibold min-w-[140px]">pKi (Inhibition):</span>
             <span>Negative log of Ki. Higher values indicate more potent inhibition. Derived from pKd with enzyme correction.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="font-semibold min-w-[140px]">logKa (Association):</span>
+            <span>Log of association constant Ka (= 1/Kd). Higher values (≥6 M⁻¹) indicate stronger binding affinity.</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="font-semibold min-w-[140px]">Ligand Efficiency:</span>
