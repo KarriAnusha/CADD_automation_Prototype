@@ -363,8 +363,9 @@ const SchematicDiagram3D = ({
           </div>
         </div>
 
-        <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg overflow-hidden" style={{ height: isFullscreen ? '100vh' : '350px' }}>
+        <div className="relative bg-white rounded-lg overflow-hidden border border-border" style={{ height: isFullscreen ? '100vh' : '350px' }}>
           <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
+            <color attach="background" args={["#ffffff"]} />
             <Scene
               atoms={atoms}
               bonds={bonds}
@@ -372,7 +373,7 @@ const SchematicDiagram3D = ({
               setHoveredAtom={setHoveredAtom}
             />
           </Canvas>
-          <div className="absolute bottom-3 left-3 text-xs text-white/60 bg-black/30 px-2 py-1 rounded">
+          <div className="absolute bottom-3 left-3 text-xs text-muted-foreground bg-white/80 px-2 py-1 rounded">
             Drag to rotate • Scroll to zoom
           </div>
         </div>
