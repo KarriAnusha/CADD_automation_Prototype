@@ -2439,27 +2439,38 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
 
     case "search_zinc":
       try {
-        const subset = args.subset || 'druglike';
         const limit = args.limit || 10;
-        const query = encodeURIComponent(args.query);
+        const query = args.query;
         
-        // ZINC15 API
+        // ZINC20 API - use the substances endpoint with POST for text search
+        // First try the tranches endpoint for drug-like compounds
+        const formData = new FormData();
+        formData.append('query', query);
+        formData.append('count', limit.toString());
+        
+        // Try ZINC15 substances endpoint with proper format
         const response = await fetch(
-          `https://zinc15.docking.org/substances/search/?q=${query}&count=${limit}&output_fields=zinc_id,smiles,mwt,logp,purchasable`
+          `https://zinc15.docking.org/substances.json?count=${limit}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `smiles-in=${encodeURIComponent(query)}&output_fields=zinc_id+smiles+mwt+logp+purchasable`
+          }
         );
         
-        if (!response.ok) {
-          // Try alternative search endpoint
-          const altResponse = await fetch(
-            `https://zinc.docking.org/substances.json?count=${limit}&ecfp4_fp-tanimoto-70=${query}`
-          );
-          
-          if (!altResponse.ok) {
-            throw new Error(`ZINC API error: ${response.status}`);
-          }
-          
-          const altData = await altResponse.json();
-          const results = (altData || []).slice(0, limit).map((sub: any) => ({
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          // ZINC API returned HTML - service may be down or endpoint changed
+          console.log('ZINC API returned non-JSON response');
+          throw new Error('ZINC API returned non-JSON response');
+        }
+        
+        if (response.ok) {
+          const data = await response.json();
+          const results = (data || []).slice(0, limit).map((sub: any) => ({
             zinc_id: sub.zinc_id,
             smiles: sub.smiles,
             molecular_weight: sub.mwt,
@@ -2469,30 +2480,19 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
           
           return {
             results,
-            message: `Found ${results.length} compounds from ZINC database. Use import_zinc_compound to add them to your library.`
+            message: `Found ${results.length} commercially available compounds from ZINC matching "${query}".`
           };
         }
         
-        const data = await response.json();
-        const results = (data || []).slice(0, limit).map((sub: any) => ({
-          zinc_id: sub.zinc_id,
-          smiles: sub.smiles,
-          molecular_weight: sub.mwt,
-          logp: sub.logp,
-          purchasable: sub.purchasable || 'unknown'
-        }));
-        
-        return {
-          results,
-          message: `Found ${results.length} commercially available compounds from ZINC matching "${args.query}".`
-        };
+        throw new Error(`ZINC API error: ${response.status}`);
       } catch (error) {
         console.error('ZINC search error:', error);
-        // Return simulated results for demo purposes when API is unavailable
+        // ZINC database API is unreliable for text searches
+        // Recommend alternatives
         return {
           results: [],
-          message: `ZINC database search for "${args.query}" - API temporarily unavailable. Try searching PubChem or ChEMBL instead.`,
-          suggestion: "Use search_ligands or search_chembl as alternatives."
+          message: `ZINC database text search is currently unavailable (API returns HTML instead of JSON). ZINC is optimized for structure-based searches using SMILES strings. Please use ChEMBL or PubChem for text-based compound searches, which provide more reliable results.`,
+          suggestion: "Use search_chembl or search_ligands (PubChem) for text-based compound searches."
         };
       }
 
