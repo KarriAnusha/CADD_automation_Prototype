@@ -2792,7 +2792,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages } = await req.json();
+    const requestBody = await req.json();
+    const { messages, directTool } = requestBody;
     const authHeader = req.headers.get('authorization');
     const token = authHeader?.replace('Bearer ', '');
     
@@ -2807,6 +2808,19 @@ serve(async (req) => {
     }
 
     console.log('Processing agent request for user:', user.id);
+
+    // Direct tool execution - bypass AI for simple operations
+    if (directTool && directTool.name && directTool.args) {
+      console.log('Direct tool execution:', directTool.name);
+      const toolResult = await executeToolCall(directTool.name, directTool.args, user.id);
+      return new Response(JSON.stringify({ 
+        response: `Direct tool execution: ${directTool.name}`,
+        toolResults: [toolResult],
+        iterations: 1
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     const systemPrompt = `You are a CADD-SBDD (Computer Aided Drug Design - Structure Based Drug Design) AI agent. Your role is to help researchers discover and optimize drug candidates through computational methods.
 
