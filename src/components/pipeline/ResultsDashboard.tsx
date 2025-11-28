@@ -355,7 +355,7 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
         { property: "Distribution", value: bestCompound.distribution_score || 0 },
         { property: "Metabolism", value: bestCompound.metabolism_score || 0 },
         { property: "Excretion", value: bestCompound.excretion_score || 0 },
-        { property: "Toxicity", value: bestCompound.toxicity_score || 0 },
+        { property: "Safety", value: 100 - (bestCompound.toxicity_score || 0) },
       ]
     : [];
 
