@@ -20,15 +20,15 @@ interface SchematicDiagram3DProps {
 }
 
 const atomColors: Record<string, string> = {
-  C: "#1a1a1a",    // Dark black/charcoal for Carbon
-  O: "#dc2626",    // Bright red for Oxygen
-  N: "#2563eb",    // Bright blue for Nitrogen
-  S: "#ca8a04",    // Golden yellow for Sulfur
-  H: "#6b7280",    // Medium gray for Hydrogen
-  F: "#16a34a",    // Green for Fluorine
-  Cl: "#059669",   // Teal green for Chlorine
-  Br: "#c2410c",   // Dark orange for Bromine
-  P: "#7c3aed",    // Violet for Phosphorus
+  C: "#909090",    // Gray for Carbon (CPK standard)
+  O: "#ff0d0d",    // Red for Oxygen
+  N: "#3050f8",    // Blue for Nitrogen
+  S: "#ffff30",    // Yellow for Sulfur
+  H: "#e0e0e0",    // Light gray/white for Hydrogen
+  F: "#90e050",    // Light green for Fluorine
+  Cl: "#1ff01f",   // Green for Chlorine
+  Br: "#a62929",   // Brown/maroon for Bromine
+  P: "#ff8000",    // Orange for Phosphorus
 };
 
 const atomRadii: Record<string, number> = {
