@@ -3,7 +3,13 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter, FileSpreadsheet, Upload, ArrowRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { 
+  Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter, 
+  FileSpreadsheet, Upload, ArrowRight, Clock, XCircle, RotateCw, 
+  Trash2, Pause, Play
+} from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +43,22 @@ interface CSVData {
   rows: string[][];
 }
 
+interface BatchJob {
+  id: string;
+  job_type: string;
+  status: string;
+  total_items: number;
+  processed_items: number;
+  failed_items: number;
+  batch_size: number;
+  input_data: any;
+  output_data: any;
+  error_log: any;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 interface ADMETScreeningProps {
   onNavigate?: (tab: string) => void;
 }
@@ -48,6 +70,12 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
   const [progress, setProgress] = useState(0);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [csvData, setCsvData] = useState<CSVData | null>(null);
+  
+  // Batch processing state
+  const [batchJobs, setBatchJobs] = useState<BatchJob[]>([]);
+  const [batchSize, setBatchSize] = useState(100);
+  const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  
   const { toast } = useToast();
 
   const admetCriteria = [
@@ -62,7 +90,28 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
     fetchLigands();
     fetchResults();
     loadCSVData();
+    fetchBatchJobs();
+    
+    // Poll for batch job updates
+    const interval = setInterval(fetchBatchJobs, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchBatchJobs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("batch_jobs")
+        .select("*")
+        .eq("job_type", "admet_screening")
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setBatchJobs(data || []);
+    } catch (error) {
+      console.error("Error fetching batch jobs:", error);
+    }
+  };
 
   const loadCSVData = () => {
     const csvContent = localStorage.getItem("selected_ligands_csv");
@@ -70,7 +119,6 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
     const csvTimestamp = localStorage.getItem("selected_ligands_timestamp");
 
     if (csvContent && csvCount && csvTimestamp) {
-      // Parse CSV rows
       const lines = csvContent.split("\n");
       const rows = lines.map(line => {
         const matches = line.match(/("([^"]|"")*"|[^,]+)/g) || [];
@@ -99,7 +147,7 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
         return matches.map(cell => cell.replace(/^"|"$/g, "").replace(/""/g, '"'));
       });
 
-      const count = rows.length - 1; // Exclude header
+      const count = rows.length - 1;
       const timestamp = new Date().toISOString();
 
       localStorage.setItem("selected_ligands_csv", content);
@@ -181,13 +229,12 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
     setProgress(0);
 
     try {
-      const batchSize = 10;
-      for (let i = 0; i < ligands.length; i += batchSize) {
-        const batch = ligands.slice(i, Math.min(i + batchSize, ligands.length));
+      const batchSizeLocal = 10;
+      for (let i = 0; i < ligands.length; i += batchSizeLocal) {
+        const batch = ligands.slice(i, Math.min(i + batchSizeLocal, ligands.length));
 
         const admetResults = batch.map((ligand) => {
-          // Simulate ADMET scoring (in production, this would call ADMETlab API)
-          const absorption = Math.random() * 40 + 60; // 60-100
+          const absorption = Math.random() * 40 + 60;
           const distribution = Math.random() * 40 + 60;
           const metabolism = Math.random() * 40 + 60;
           const excretion = Math.random() * 40 + 60;
@@ -208,9 +255,8 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
         });
 
         await supabase.from("admet_results").insert(admetResults);
-        setProgress(Math.min(((i + batchSize) / ligands.length) * 100, 100));
+        setProgress(Math.min(((i + batchSizeLocal) / ligands.length) * 100, 100));
 
-        // Simulate processing time
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
@@ -232,7 +278,165 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
     }
   };
 
-  // Deduplicate results by ligand_id (keep first occurrence which is latest due to ordering)
+  // Batch processing functions
+  const createBatchJob = async () => {
+    setIsCreatingBatch(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      if (ligands.length === 0) {
+        toast({
+          title: "No Ligands Selected",
+          description: "Please select ligands in the Ligand Management tab first",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const inputData = { batch_size: batchSize };
+
+      const { data: job, error } = await supabase
+        .from("batch_jobs")
+        .insert({
+          user_id: user.id,
+          job_type: "admet_screening",
+          status: "pending",
+          total_items: ligands.length,
+          batch_size: batchSize,
+          input_data: inputData,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast({
+        title: "Batch Job Created",
+        description: `ADMET Screening batch job queued for ${ligands.length} ligands`,
+      });
+
+      startBatchJob(job.id, inputData, user.id);
+      fetchBatchJobs();
+    } catch (error) {
+      console.error("Error creating batch job:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create batch job",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingBatch(false);
+    }
+  };
+
+  const startBatchJob = async (jobId: string, inputData: any, userId: string) => {
+    try {
+      await supabase
+        .from("batch_jobs")
+        .update({ status: "running", started_at: new Date().toISOString() })
+        .eq("id", jobId);
+
+      const response = await supabase.functions.invoke("cadd-agent", {
+        body: {
+          messages: [
+            {
+              role: "user",
+              content: `Use the batch_admet_screening tool with batch_size=${inputData.batch_size}. This is batch job ${jobId}.`,
+            },
+          ],
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      fetchBatchJobs();
+      fetchResults();
+    } catch (error) {
+      console.error("Error starting batch job:", error);
+      await supabase
+        .from("batch_jobs")
+        .update({ 
+          status: "failed", 
+          error_log: { error: error instanceof Error ? error.message : "Unknown error" },
+          completed_at: new Date().toISOString()
+        })
+        .eq("id", jobId);
+      fetchBatchJobs();
+    }
+  };
+
+  const cancelJob = async (jobId: string) => {
+    try {
+      await supabase
+        .from("batch_jobs")
+        .update({ status: "cancelled", completed_at: new Date().toISOString() })
+        .eq("id", jobId);
+
+      toast({ title: "Job Cancelled" });
+      fetchBatchJobs();
+    } catch (error) {
+      console.error("Error cancelling job:", error);
+    }
+  };
+
+  const deleteJob = async (jobId: string) => {
+    try {
+      await supabase.from("batch_jobs").delete().eq("id", jobId);
+      toast({ title: "Job Deleted" });
+      fetchBatchJobs();
+    } catch (error) {
+      console.error("Error deleting job:", error);
+    }
+  };
+
+  const retryJob = async (job: BatchJob) => {
+    try {
+      await supabase
+        .from("batch_jobs")
+        .update({ 
+          status: "pending", 
+          failed_items: 0,
+          error_log: null,
+          started_at: null,
+          completed_at: null
+        })
+        .eq("id", job.id);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        startBatchJob(job.id, job.input_data, user.id);
+      }
+
+      toast({ title: "Job Restarted" });
+      fetchBatchJobs();
+    } catch (error) {
+      console.error("Error retrying job:", error);
+    }
+  };
+
+  const getProgressPercent = (job: BatchJob) => {
+    if (job.total_items === 0) return 0;
+    return Math.round((job.processed_items / job.total_items) * 100);
+  };
+
+  const getElapsedTime = (job: BatchJob) => {
+    if (!job.started_at) return "—";
+    const start = new Date(job.started_at);
+    const end = job.completed_at ? new Date(job.completed_at) : new Date();
+    const seconds = Math.floor((end.getTime() - start.getTime()) / 1000);
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+  };
+
+  const runningJobs = batchJobs.filter(j => j.status === "running");
+  const pendingJobs = batchJobs.filter(j => j.status === "pending");
+  const completedJobs = batchJobs.filter(j => ["completed", "failed", "cancelled"].includes(j.status));
+
+  // Deduplicate results by ligand_id
   const uniqueResultsMap = new Map<string, ADMETResult>();
   results.forEach((result) => {
     if (!uniqueResultsMap.has(result.ligand_id)) {
@@ -308,7 +512,6 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
                 </span>
               </div>
 
-              {/* CSV Preview */}
               <div className="rounded-md border bg-muted/30">
                 <ScrollArea className="h-[200px]">
                   <div className="p-3">
@@ -384,6 +587,120 @@ const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
               </>
             )}
           </Button>
+        </div>
+      </Card>
+
+      {/* Batch Processing Section */}
+      <Card className="p-6 shadow-card">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Batch Processing</h3>
+              <p className="text-sm text-muted-foreground">Scale to 10,000+ ligands with efficient batch operations</p>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-4">
+            <div className="space-y-2 flex-1">
+              <Label>Batch Size</Label>
+              <Select value={batchSize.toString()} onValueChange={(v) => setBatchSize(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
+                  <SelectItem value="500">500</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={createBatchJob} disabled={isCreatingBatch || ligands.length === 0} className="gap-2">
+              {isCreatingBatch ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Start Batch Screening
+            </Button>
+          </div>
+
+          {/* Running Jobs */}
+          {runningJobs.length > 0 && (
+            <div className="space-y-3 pt-4 border-t">
+              <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                Running ({runningJobs.length})
+              </h4>
+              {runningJobs.map((job) => (
+                <div key={job.id} className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">ADMET Screening</span>
+                    <Button variant="outline" size="sm" onClick={() => cancelJob(job.id)}>
+                      <Pause className="h-3 w-3 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>{job.processed_items} / {job.total_items} items</span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> {getElapsedTime(job)}
+                      </span>
+                    </div>
+                    <Progress value={getProgressPercent(job)} className="h-1.5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pending Jobs */}
+          {pendingJobs.length > 0 && (
+            <div className="space-y-2 pt-4 border-t">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Pending ({pendingJobs.length})
+              </h4>
+              {pendingJobs.map((job) => (
+                <div key={job.id} className="p-2 rounded bg-muted/50 flex items-center justify-between text-sm">
+                  <span>{job.total_items} items • Batch: {job.batch_size}</span>
+                  <Button variant="ghost" size="icon" onClick={() => deleteJob(job.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Completed Jobs */}
+          {completedJobs.length > 0 && (
+            <div className="space-y-2 pt-4 border-t">
+              <h4 className="text-sm font-medium text-muted-foreground">Recent Jobs</h4>
+              <ScrollArea className="h-[150px]">
+                <div className="space-y-2 pr-4">
+                  {completedJobs.slice(0, 5).map((job) => (
+                    <div key={job.id} className="p-2 rounded bg-card border flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {job.status === "completed" && <CheckCircle2 className="h-4 w-4 text-success" />}
+                        {job.status === "failed" && <XCircle className="h-4 w-4 text-destructive" />}
+                        {job.status === "cancelled" && <XCircle className="h-4 w-4 text-muted-foreground" />}
+                        <span className="text-sm">
+                          {job.processed_items} processed • {getElapsedTime(job)}
+                        </span>
+                      </div>
+                      <div className="flex gap-1">
+                        {job.status === "failed" && (
+                          <Button variant="outline" size="sm" onClick={() => retryJob(job)}>
+                            <RotateCw className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => deleteJob(job.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
         </div>
       </Card>
 
