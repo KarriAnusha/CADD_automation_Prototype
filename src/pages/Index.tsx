@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Activity, Database, Shield, Dna, BarChart3, GitCompare, Sparkles, Atom, Layers } from "lucide-react";
+import { Activity, Database, Shield, Dna, BarChart3, GitCompare, Sparkles, Atom } from "lucide-react";
 import PipelineOverview from "@/components/pipeline/PipelineOverview";
 import ProteinSelection from "@/components/pipeline/ProteinSelection";
 import LigandManagement from "@/components/pipeline/LigandManagement";
@@ -11,7 +11,6 @@ import ResultsDashboard from "@/components/pipeline/ResultsDashboard";
 import { CompoundComparison } from "@/components/pipeline/CompoundComparison";
 import { AgentChat } from "@/components/agent/AgentChat";
 import InteractionDiagrams from "@/components/pipeline/InteractionDiagrams";
-import BatchProcessing from "@/components/pipeline/BatchProcessing";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -66,10 +65,6 @@ const Index = () => {
                 <Atom className="h-4 w-4" />
                 <span className="hidden lg:inline">2D Diagrams</span>
               </TabsTrigger>
-              <TabsTrigger value="batch" className="flex items-center gap-1.5 text-xs">
-                <Layers className="h-4 w-4" />
-                <span className="hidden lg:inline">Batch</span>
-              </TabsTrigger>
               <TabsTrigger value="results" className="flex items-center gap-1.5 text-xs">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden lg:inline">Results</span>
@@ -107,10 +102,6 @@ const Index = () => {
 
               <TabsContent value="diagrams" className="mt-0">
                 <InteractionDiagrams onNavigate={setActiveTab} />
-              </TabsContent>
-
-              <TabsContent value="batch" className="mt-0">
-                <BatchProcessing onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="results" className="mt-0">
