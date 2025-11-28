@@ -257,8 +257,8 @@ const InteractionDiagrams = ({ onNavigate }: InteractionDiagramsProps) => {
       {/* Next Button */}
       {onNavigate && (
         <div className="flex justify-end pt-4">
-          <Button onClick={() => onNavigate("batch")} className="gap-2">
-            Next: Batch Processing
+          <Button onClick={() => onNavigate("results")} className="gap-2">
+            Next: Results and Analysis
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
