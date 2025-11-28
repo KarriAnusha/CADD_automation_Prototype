@@ -587,12 +587,24 @@ const LigandManagement = () => {
 
       {/* Info Card */}
       <Card className="border-l-4 border-l-secondary bg-secondary/5 p-4">
-        <h4 className="mb-2 font-semibold text-foreground">About PubChem Integration</h4>
-        <p className="text-sm text-muted-foreground">
-          PubChem is a database of chemical molecules. The pipeline will extract molecular structures, properties, and
-          identifiers for screening. Ligands meeting initial criteria will proceed to ADMET analysis for safety
-          assessment.
-        </p>
+        <h4 className="mb-2 font-semibold text-foreground">About Integrated Databases</h4>
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            <strong className="text-foreground">PubChem:</strong> NIH's comprehensive database of chemical molecules with over 100 million compounds, providing molecular structures, properties, and biological activities.
+          </p>
+          <p>
+            <strong className="text-foreground">ChEMBL:</strong> EMBL-EBI's database of bioactive molecules with drug-like properties, containing binding, functional, and ADMET data from medicinal chemistry literature.
+          </p>
+          <p>
+            <strong className="text-foreground">DrugBank:</strong> Comprehensive resource combining drug data with drug target information, including FDA-approved drugs, experimental compounds, and nutraceuticals.
+          </p>
+          <p>
+            <strong className="text-foreground">KEGG Ligand:</strong> Kyoto Encyclopedia database of chemical compounds, glycans, and reactions involved in cellular processes and metabolic pathways.
+          </p>
+          <p className="pt-2 border-t border-border">
+            The pipeline extracts molecular structures, properties, and identifiers from these databases for screening. Ligands meeting initial criteria proceed to ADMET analysis for safety assessment.
+          </p>
+        </div>
       </Card>
     </div>
   );
