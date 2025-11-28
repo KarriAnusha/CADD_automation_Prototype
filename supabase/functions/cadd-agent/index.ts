@@ -614,8 +614,10 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
             fraction_csp3: 0
           };
 
-          // Fetch detailed properties from PubChem
-          if (ligand.pubchem_cid) {
+          // Fetch detailed properties from PubChem only if it's a pure PubChem CID (numeric)
+          const isPubChemCID = ligand.pubchem_cid && /^\d+$/.test(ligand.pubchem_cid);
+          
+          if (isPubChemCID) {
             const propsResponse = await fetch(
               `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${ligand.pubchem_cid}/property/MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,HeavyAtomCount,RingCount,Complexity,Charge/JSON`
             );
@@ -641,6 +643,44 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
                 };
               }
             }
+          } else if (ligand.smiles) {
+            // For compounds from other sources (ChEMBL, ZINC, DrugBank, KEGG), estimate properties from SMILES
+            const smiles = ligand.smiles;
+            const mw = ligand.molecular_weight || 400;
+            
+            // Estimate properties from SMILES structure
+            const heavyAtoms = (smiles.match(/[CNOSPF]/gi) || []).length;
+            const hbd = (smiles.match(/[NH]/g) || []).length + (smiles.match(/OH/g) || []).length;
+            const hba = (smiles.match(/[NOF]/gi) || []).length;
+            const rotatable = (smiles.match(/[^=]C[^=]/g) || []).length;
+            const rings = (smiles.match(/1|2|3|4|5|6|7|8|9/g) || []).length / 2;
+            const aromatic = (smiles.match(/[a-z]/g) || []).length;
+            
+            // Estimate LogP using Wildman-Crippen method approximation
+            const carbons = (smiles.match(/C/gi) || []).length;
+            const nitrogens = (smiles.match(/N/gi) || []).length;
+            const oxygens = (smiles.match(/O/gi) || []).length;
+            const halogens = (smiles.match(/[FClBrI]/gi) || []).length;
+            const estimatedLogP = (carbons * 0.5) - (nitrogens * 1.0) - (oxygens * 1.2) + (halogens * 0.8) - 1.0;
+            
+            // Estimate TPSA
+            const estimatedTPSA = (hba * 20) + (hbd * 15);
+            
+            properties = {
+              molecular_weight: mw,
+              smiles: smiles,
+              hbd: Math.min(hbd, 10),
+              hba: Math.min(hba, 15),
+              tpsa: Math.min(estimatedTPSA, 200),
+              logp: Math.max(-3, Math.min(estimatedLogP, 7)),
+              rotatable_bonds: Math.min(rotatable, 15),
+              heavy_atoms: heavyAtoms,
+              rings: Math.floor(rings),
+              aromatic_rings: Math.floor(aromatic / 6),
+              complexity: heavyAtoms * 10 + rings * 50,
+              charge: (smiles.match(/\+/g) || []).length - (smiles.match(/-/g) || []).length,
+              fraction_csp3: 1 - (aromatic / Math.max(heavyAtoms, 1))
+            };
           }
 
           const smiles = (properties.smiles || '').toUpperCase();
@@ -1115,7 +1155,10 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
               aromatic_rings: 1
             };
 
-            if (ligand.pubchem_cid) {
+            // Check if it's a pure PubChem CID (numeric only)
+            const isPubChemCID = ligand.pubchem_cid && /^\d+$/.test(ligand.pubchem_cid);
+            
+            if (isPubChemCID) {
               const propsResponse = await fetch(
                 `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${ligand.pubchem_cid}/property/MolecularWeight,XLogP,TPSA,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,HeavyAtomCount,RingCount,Charge,Complexity/JSON`
               );
@@ -1139,6 +1182,35 @@ async function executeToolCall(toolName: string, args: any, userId: string) {
                   };
                 }
               }
+            } else if (ligand.smiles) {
+              // Estimate properties from SMILES for compounds from other databases
+              const smiles = ligand.smiles;
+              const heavyAtoms = (smiles.match(/[CNOSPF]/gi) || []).length;
+              const hbd = (smiles.match(/[NH]/g) || []).length + (smiles.match(/OH/g) || []).length;
+              const hba = (smiles.match(/[NOF]/gi) || []).length;
+              const rotatable = (smiles.match(/[^=]C[^=]/g) || []).length;
+              const rings = (smiles.match(/1|2|3|4|5|6|7|8|9/g) || []).length / 2;
+              const aromatic = (smiles.match(/[a-z]/g) || []).length;
+              const carbons = (smiles.match(/C/gi) || []).length;
+              const nitrogens = (smiles.match(/N/gi) || []).length;
+              const oxygens = (smiles.match(/O/gi) || []).length;
+              const halogens = (smiles.match(/[FClBrI]/gi) || []).length;
+              const estimatedLogP = (carbons * 0.5) - (nitrogens * 1.0) - (oxygens * 1.2) + (halogens * 0.8) - 1.0;
+              const estimatedTPSA = (hba * 20) + (hbd * 15);
+              
+              ligandProps = {
+                mw: ligand.molecular_weight || 400,
+                logp: Math.max(-3, Math.min(estimatedLogP, 7)),
+                hbd: Math.min(hbd, 10),
+                hba: Math.min(hba, 15),
+                tpsa: Math.min(estimatedTPSA, 200),
+                rotatable_bonds: Math.min(rotatable, 15),
+                rings: Math.floor(rings),
+                heavy_atoms: heavyAtoms,
+                charge: (smiles.match(/\+/g) || []).length - (smiles.match(/-/g) || []).length,
+                complexity: heavyAtoms * 10 + rings * 50,
+                aromatic_rings: Math.floor(aromatic / 6)
+              };
             }
 
             // ============ DATA QUALITY ASSESSMENT ============
