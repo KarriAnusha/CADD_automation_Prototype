@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter, FileSpreadsheet, Upload } from "lucide-react";
+import { Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter, FileSpreadsheet, Upload, ArrowRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +37,11 @@ interface CSVData {
   rows: string[][];
 }
 
-const ADMETScreening = () => {
+interface ADMETScreeningProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const ADMETScreening = ({ onNavigate }: ADMETScreeningProps) => {
   const [ligands, setLigands] = useState<any[]>([]);
   const [results, setResults] = useState<ADMETResult[]>([]);
   const [isScreening, setIsScreening] = useState(false);
@@ -545,6 +549,16 @@ const ADMETScreening = () => {
           experimental testing.
         </p>
       </Card>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("docking")} className="gap-2">
+            Next: Docking Analysis
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

@@ -5,14 +5,18 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, Bot, User, Sparkles } from "lucide-react";
+import { Loader2, Send, Bot, User, Sparkles, ArrowRight } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-export const AgentChat = () => {
+interface AgentChatProps {
+  onNavigate?: (tab: string) => void;
+}
+
+export const AgentChat = ({ onNavigate }: AgentChatProps) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -191,6 +195,16 @@ export const AgentChat = () => {
           Press Enter to send, Shift+Enter for new line
         </p>
       </Card>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("overview")} variant="outline" className="gap-2">
+            Next: Pipeline Overview
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

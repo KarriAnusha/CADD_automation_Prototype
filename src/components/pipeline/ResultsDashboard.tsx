@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { 
   Download, FileText, BarChart3, TrendingDown, Award, Beaker, 
   Search, Filter, Eye, FileSpreadsheet, ArrowUpDown, Activity,
-  AlertTriangle, CheckCircle2, XCircle
+  AlertTriangle, CheckCircle2, XCircle, ArrowRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -78,6 +78,10 @@ interface InteractionData {
 type SortField = "docking_score" | "binding_affinity" | "admet_score" | "rmsd";
 type SortOrder = "asc" | "desc";
 
+interface ResultsDashboardProps {
+  onNavigate?: (tab: string) => void;
+}
+
 const ADMET_COLORS = {
   absorption: "hsl(var(--chart-1))",
   distribution: "hsl(var(--chart-2))",
@@ -86,7 +90,7 @@ const ADMET_COLORS = {
   toxicity: "hsl(var(--chart-5))",
 };
 
-const ResultsDashboard = () => {
+const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
   const [stats, setStats] = useState({
     proteinsCount: 0,
     ligandsCount: 0,
@@ -921,6 +925,16 @@ const ResultsDashboard = () => {
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("comparison")} className="gap-2">
+            Next: Compare Compounds
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Loader2, Database, Check, Trash2 } from "lucide-react";
+import { Search, Plus, Loader2, Database, Check, Trash2, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,7 +18,11 @@ interface Protein {
   selected: boolean;
 }
 
-const ProteinSelection = () => {
+interface ProteinSelectionProps {
+  onNavigate?: (tab: string) => void;
+}
+
+const ProteinSelection = ({ onNavigate }: ProteinSelectionProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<Protein[]>([]);
@@ -331,6 +335,16 @@ const ProteinSelection = () => {
           the drug design process. The pipeline will extract 3D coordinates and structural data for docking analysis.
         </p>
       </Card>
+
+      {/* Next Button */}
+      {onNavigate && (
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onNavigate("ligands")} className="gap-2">
+            Next: Ligands
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
