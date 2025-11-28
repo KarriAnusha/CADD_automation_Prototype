@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter } from "lucide-react";
+import { Shield, PlayCircle, CheckCircle2, AlertCircle, Loader2, Filter, FileSpreadsheet, Upload } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ADMETResult {
   id: string;
@@ -29,12 +30,20 @@ interface ADMETResult {
   passed_screening: boolean;
 }
 
+interface CSVData {
+  content: string;
+  count: number;
+  timestamp: string;
+  rows: string[][];
+}
+
 const ADMETScreening = () => {
   const [ligands, setLigands] = useState<any[]>([]);
   const [results, setResults] = useState<ADMETResult[]>([]);
   const [isScreening, setIsScreening] = useState(false);
   const [progress, setProgress] = useState(0);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [csvData, setCsvData] = useState<CSVData | null>(null);
   const { toast } = useToast();
 
   const admetCriteria = [
@@ -48,7 +57,60 @@ const ADMETScreening = () => {
   useEffect(() => {
     fetchLigands();
     fetchResults();
+    loadCSVData();
   }, []);
+
+  const loadCSVData = () => {
+    const csvContent = localStorage.getItem("selected_ligands_csv");
+    const csvCount = localStorage.getItem("selected_ligands_count");
+    const csvTimestamp = localStorage.getItem("selected_ligands_timestamp");
+
+    if (csvContent && csvCount && csvTimestamp) {
+      // Parse CSV rows
+      const lines = csvContent.split("\n");
+      const rows = lines.map(line => {
+        const matches = line.match(/("([^"]|"")*"|[^,]+)/g) || [];
+        return matches.map(cell => cell.replace(/^"|"$/g, "").replace(/""/g, '"'));
+      });
+
+      setCsvData({
+        content: csvContent,
+        count: parseInt(csvCount),
+        timestamp: csvTimestamp,
+        rows: rows,
+      });
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const lines = content.split("\n").filter(line => line.trim());
+      const rows = lines.map(line => {
+        const matches = line.match(/("([^"]|"")*"|[^,]+)/g) || [];
+        return matches.map(cell => cell.replace(/^"|"$/g, "").replace(/""/g, '"'));
+      });
+
+      const count = rows.length - 1; // Exclude header
+      const timestamp = new Date().toISOString();
+
+      localStorage.setItem("selected_ligands_csv", content);
+      localStorage.setItem("selected_ligands_count", count.toString());
+      localStorage.setItem("selected_ligands_timestamp", timestamp);
+
+      setCsvData({ content, count, timestamp, rows });
+
+      toast({
+        title: "CSV Loaded",
+        description: `Loaded ${count} ligands from CSV file`,
+      });
+    };
+    reader.readAsText(file);
+  };
 
   const fetchLigands = async () => {
     const { data, error } = await supabase
@@ -187,6 +249,90 @@ const ADMETScreening = () => {
           ADMETlab 3.0
         </Badge>
       </div>
+
+      {/* CSV Data Card */}
+      <Card className="border-2 border-primary/20 bg-card p-6 shadow-card">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Ligand CSV Data</h3>
+                <p className="text-sm text-muted-foreground">
+                  {csvData 
+                    ? `${csvData.count} ligands loaded from CSV` 
+                    : "No CSV data loaded. Export from Ligand Management or upload a file."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="csv-upload">
+                <input
+                  id="csv-upload"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button variant="outline" size="sm" className="gap-2" asChild>
+                  <span className="cursor-pointer">
+                    <Upload className="h-4 w-4" />
+                    Upload CSV
+                  </span>
+                </Button>
+              </label>
+            </div>
+          </div>
+
+          {csvData && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant="secondary">{csvData.count} ligands</Badge>
+                <span className="text-muted-foreground">
+                  Exported: {new Date(csvData.timestamp).toLocaleString()}
+                </span>
+              </div>
+
+              {/* CSV Preview */}
+              <div className="rounded-md border bg-muted/30">
+                <ScrollArea className="h-[200px]">
+                  <div className="p-3">
+                    <table className="w-full text-xs font-mono">
+                      <thead>
+                        <tr className="border-b">
+                          {csvData.rows[0]?.map((header, i) => (
+                            <th key={i} className="text-left py-2 px-2 font-semibold text-muted-foreground">
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvData.rows.slice(1, 11).map((row, rowIndex) => (
+                          <tr key={rowIndex} className="border-b border-border/50">
+                            {row.map((cell, cellIndex) => (
+                              <td key={cellIndex} className="py-2 px-2 text-foreground truncate max-w-[150px]">
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {csvData.rows.length > 11 && (
+                      <p className="text-center text-muted-foreground py-2">
+                        ... and {csvData.rows.length - 11} more rows
+                      </p>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Screening Progress */}
       <Card className="bg-gradient-to-br from-accent/10 to-secondary/10 p-6 shadow-card">
