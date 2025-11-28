@@ -59,16 +59,42 @@ const ProteinSelection = () => {
 
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://search.rcsb.org/rcsbsearch/v2/query?json={"query":{"type":"terminal","service":"text","parameters":{"value":"${searchQuery}"}},"return_type":"entry","request_options":{"paginate":{"start":0,"rows":10}}}`
-      );
+      // Route through edge function to avoid CORS issues
+      const { data, error } = await supabase.functions.invoke('cadd-agent', {
+        body: {
+          message: `Search PDB for protein: ${searchQuery}`,
+          directTool: {
+            name: 'search_proteins',
+            args: { query: searchQuery, limit: 10 }
+          }
+        }
+      });
 
-      if (!response.ok) throw new Error("Search failed");
+      if (error) throw error;
 
-      const data = await response.json();
-      const pdbIds = data.result_set?.map((r: any) => r.identifier) || [];
+      // Parse the response to extract protein results
+      const responseText = data?.response || '';
+      const toolResults = data?.toolResults || [];
+      
+      // Find the search results from tool execution
+      let proteins: Protein[] = [];
+      
+      for (const result of toolResults) {
+        if (result.results && Array.isArray(result.results)) {
+          proteins = result.results.map((p: any) => ({
+            pdb_id: p.pdb_id,
+            name: p.name || p.title || "Unknown",
+            organism: p.organism || "Unknown",
+            resolution: p.resolution || 0,
+            method: p.method || "Unknown",
+            description: p.description || "",
+            selected: false,
+          }));
+          break;
+        }
+      }
 
-      if (pdbIds.length === 0) {
+      if (proteins.length === 0) {
         setSearchResults([]);
         toast({
           title: "No results found",
@@ -78,28 +104,13 @@ const ProteinSelection = () => {
         return;
       }
 
-      const detailsPromises = pdbIds.map((pdbId: string) =>
-        fetch(`https://data.rcsb.org/rest/v1/core/entry/${pdbId}`).then((r) => r.json())
-      );
-
-      const details = await Promise.all(detailsPromises);
-
-      const proteins: Protein[] = details.map((detail) => ({
-        pdb_id: detail.entry.id,
-        name: detail.struct.title || "Unknown",
-        organism: detail.rcsb_entity_source_organism?.[0]?.ncbi_scientific_name || "Unknown",
-        resolution: detail.refine?.[0]?.ls_d_res_high || detail.em_3d_reconstruction?.resolution || 0,
-        method: detail.exptl?.[0]?.method || "Unknown",
-        description: detail.struct.pdbx_descriptor || "",
-        selected: false,
-      }));
-
       setSearchResults(proteins);
       toast({
         title: "Search Complete",
         description: `Found ${proteins.length} proteins`,
       });
     } catch (error) {
+      console.error('PDB search error:', error);
       toast({
         title: "Search Failed",
         description: "Unable to fetch protein data from PDB",
