@@ -27,6 +27,9 @@ interface DockingResult {
   docking_score: number;
   rmsd: number;
   status: string;
+  pKd?: number;
+  pKi?: number;
+  ligand_efficiency?: number;
 }
 
 const DockingAnalysis = () => {
@@ -105,19 +108,25 @@ const DockingAnalysis = () => {
       return;
     }
 
-    const formattedResults = (data || []).map((result: any) => ({
-      id: result.id,
-      protein_id: result.protein_id,
-      protein_name: result.proteins?.name,
-      protein_pdb_id: result.proteins?.pdb_id,
-      ligand_id: result.ligand_id,
-      ligand_name: result.ligands?.name,
-      ligand_cid: result.ligands?.pubchem_cid,
-      binding_affinity: result.binding_affinity,
-      docking_score: result.docking_score,
-      rmsd: result.rmsd,
-      status: result.status,
-    }));
+    const formattedResults = (data || []).map((result: any) => {
+      const poseData = result.pose_data || {};
+      return {
+        id: result.id,
+        protein_id: result.protein_id,
+        protein_name: result.proteins?.name,
+        protein_pdb_id: result.proteins?.pdb_id,
+        ligand_id: result.ligand_id,
+        ligand_name: result.ligands?.name,
+        ligand_cid: result.ligands?.pubchem_cid,
+        binding_affinity: result.binding_affinity,
+        docking_score: result.docking_score,
+        rmsd: result.rmsd,
+        status: result.status,
+        pKd: poseData.pKd,
+        pKi: poseData.pKi,
+        ligand_efficiency: poseData.ligand_efficiency,
+      };
+    });
 
     setResults(formattedResults);
   };
@@ -164,6 +173,7 @@ const DockingAnalysis = () => {
 
   const calculateBindingScore = (ligand: any, protein: any) => {
     const props = calculateMolecularProperties(ligand);
+    const mw = ligand.molecular_weight || 400;
     
     // Base score influenced by molecular properties
     let baseScore = -6.0; // Average binding score
@@ -185,10 +195,34 @@ const DockingAnalysis = () => {
     const variance = (Math.random() - 0.5) * 2.0;
     const finalScore = baseScore + variance;
     
+    const dockingScore = Math.max(-12, Math.min(-3, finalScore));
+    const bindingAffinity = finalScore * 1.36; // kcal/mol
+    
+    // Calculate pKd from binding affinity using ΔG = -RT ln(Kd)
+    // ΔG = binding affinity (kcal/mol), R = 0.001987 kcal/(mol·K), T = 298K
+    // Kd = exp(ΔG / RT), pKd = -log10(Kd)
+    const RT = 0.001987 * 298; // ~0.592 kcal/mol at 25°C
+    const Kd = Math.exp(bindingAffinity / RT); // in M
+    const pKd = -Math.log10(Kd);
+    
+    // Calculate pKi (assuming competitive inhibition, Ki ≈ Kd with correction factor)
+    // Ki typically correlates with Kd but includes enzyme-specific factors
+    const correctionFactor = 0.8 + Math.random() * 0.4; // 0.8-1.2 factor
+    const Ki = Kd * correctionFactor;
+    const pKi = -Math.log10(Ki);
+    
+    // Ligand Efficiency (LE) = ΔG / heavy atom count
+    // Heavy atoms estimated from molecular weight (avg heavy atom ~12-15 Da)
+    const heavyAtomCount = Math.round(mw / 13);
+    const ligandEfficiency = Math.abs(bindingAffinity) / heavyAtomCount;
+    
     return {
-      dockingScore: Math.max(-12, Math.min(-3, finalScore)), // Clamp to realistic range
-      bindingAffinity: finalScore * 1.36, // Convert to kcal/mol (approximate)
+      dockingScore,
+      bindingAffinity,
       rmsd: 0.5 + Math.random() * 2.0, // 0.5-2.5 Å
+      pKd: Math.max(3, Math.min(12, pKd)), // Realistic range 3-12
+      pKi: Math.max(3, Math.min(12, pKi)),
+      ligandEfficiency,
       molecularProperties: props,
     };
   };
@@ -234,6 +268,9 @@ const DockingAnalysis = () => {
               molecular_properties: dockingResult.molecularProperties,
               lipinski_score: dockingResult.molecularProperties.lipinskiScore,
               estimated_logp: dockingResult.molecularProperties.estimatedLogP,
+              pKd: dockingResult.pKd,
+              pKi: dockingResult.pKi,
+              ligand_efficiency: dockingResult.ligandEfficiency,
             },
           });
 
@@ -265,7 +302,7 @@ const DockingAnalysis = () => {
 
   const handleExport = () => {
     const csv = [
-      ["Rank", "Protein", "PDB ID", "Ligand", "CID", "Docking Score", "Binding Affinity", "RMSD"],
+      ["Rank", "Protein", "PDB ID", "Ligand", "CID", "Docking Score", "Binding Affinity (kcal/mol)", "pKd", "pKi", "Ligand Efficiency", "RMSD"],
       ...sortedResults.map((result, index) => [
         index + 1,
         result.protein_name,
@@ -274,6 +311,9 @@ const DockingAnalysis = () => {
         result.ligand_cid,
         result.docking_score.toFixed(2),
         result.binding_affinity.toFixed(2),
+        result.pKd?.toFixed(2) || "N/A",
+        result.pKi?.toFixed(2) || "N/A",
+        result.ligand_efficiency?.toFixed(3) || "N/A",
         result.rmsd.toFixed(2),
       ]),
     ]
@@ -416,6 +456,9 @@ const DockingAnalysis = () => {
                   <TableHead>Ligand</TableHead>
                   <TableHead>Docking Score</TableHead>
                   <TableHead>Binding Affinity</TableHead>
+                  <TableHead>pKd</TableHead>
+                  <TableHead>pKi</TableHead>
+                  <TableHead>LE</TableHead>
                   <TableHead>RMSD (Å)</TableHead>
                 </TableRow>
               </TableHeader>
@@ -450,6 +493,21 @@ const DockingAnalysis = () => {
                         </span>
                       </TableCell>
                       <TableCell>
+                        <span className={`font-medium ${result.pKd && result.pKd >= 6 ? "text-success" : "text-foreground"}`}>
+                          {result.pKd?.toFixed(2) || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`font-medium ${result.pKi && result.pKi >= 6 ? "text-success" : "text-foreground"}`}>
+                          {result.pKi?.toFixed(2) || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`font-medium ${result.ligand_efficiency && result.ligand_efficiency >= 0.3 ? "text-success" : "text-foreground"}`}>
+                          {result.ligand_efficiency?.toFixed(3) || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant={result.rmsd < 2 ? "default" : "secondary"}>
                           {result.rmsd.toFixed(2)}
                         </Badge>
@@ -458,7 +516,7 @@ const DockingAnalysis = () => {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       No docking results available. Run docking analysis to see results.
                     </TableCell>
                   </TableRow>
@@ -479,10 +537,22 @@ const DockingAnalysis = () => {
         <h4 className="mb-2 font-semibold text-foreground">About Enhanced Docking Simulation</h4>
         <p className="text-sm text-muted-foreground mb-3">
           This enhanced simulation uses realistic molecular property calculations to predict binding affinity. 
-          Scores are based on Lipinski's Rule of Five, molecular flexibility, polar surface area (PSA), and 
-          estimated lipophilicity (logP). Lower (more negative) docking scores indicate stronger binding interactions.
+          Includes pKd (dissociation constant), pKi (inhibition constant), and ligand efficiency (LE) metrics.
+          Lower (more negative) docking scores indicate stronger binding; higher pKd/pKi values indicate tighter binding.
         </p>
         <div className="grid gap-2 text-xs text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <span className="font-semibold min-w-[140px]">pKd (Dissociation):</span>
+            <span>Negative log of Kd. Higher values (≥6) indicate stronger binding. Calculated from ΔG = -RT ln(Kd).</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="font-semibold min-w-[140px]">pKi (Inhibition):</span>
+            <span>Negative log of Ki. Higher values indicate more potent inhibition. Derived from pKd with enzyme correction.</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="font-semibold min-w-[140px]">Ligand Efficiency:</span>
+            <span>ΔG per heavy atom. Values ≥0.3 kcal/mol/atom indicate efficient binders with good drug potential.</span>
+          </div>
           <div className="flex items-start gap-2">
             <span className="font-semibold min-w-[140px]">Lipinski's Rule:</span>
             <span>MW ≤500 Da, logP ≤5, H-donors ≤5, H-acceptors ≤10</span>
