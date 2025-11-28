@@ -82,7 +82,7 @@ const Index = () => {
 
             <div className="p-6">
               <TabsContent value="agent" className="mt-0">
-                <AgentChat />
+                <AgentChat onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="overview" className="mt-0">
@@ -90,31 +90,31 @@ const Index = () => {
               </TabsContent>
 
               <TabsContent value="proteins" className="mt-0">
-                <ProteinSelection />
+                <ProteinSelection onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="ligands" className="mt-0">
-                <LigandManagement />
+                <LigandManagement onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="admet" className="mt-0">
-                <ADMETScreening />
+                <ADMETScreening onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="docking" className="mt-0">
-                <DockingAnalysis />
+                <DockingAnalysis onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="diagrams" className="mt-0">
-                <InteractionDiagrams />
+                <InteractionDiagrams onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="batch" className="mt-0">
-                <BatchProcessing />
+                <BatchProcessing onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="results" className="mt-0">
-                <ResultsDashboard />
+                <ResultsDashboard onNavigate={setActiveTab} />
               </TabsContent>
 
               <TabsContent value="comparison" className="mt-0">
