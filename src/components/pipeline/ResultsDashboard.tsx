@@ -192,7 +192,7 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
         bestBinding: bestDockingRes.data?.docking_score || 0,
       });
 
-      // Fetch top compounds with ADMET data and interaction analysis
+      // Fetch all compounds with ADMET data and interaction analysis (no limit)
       const { data: topResults, error } = await supabase
         .from("docking_results")
         .select(`
@@ -204,8 +204,7 @@ const ResultsDashboard = ({ onNavigate }: ResultsDashboardProps) => {
           ligands (id, name, pubchem_cid, smiles, molecular_formula, molecular_weight)
         `)
         .eq("status", "completed")
-        .order("docking_score", { ascending: true })
-        .limit(50);
+        .order("docking_score", { ascending: true });
 
       if (error) throw error;
 
