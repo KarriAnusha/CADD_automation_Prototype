@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Local environment files may contain credentials or deployment configuration.
+# Commit only the redacted template kept in .env.example.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
