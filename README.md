@@ -1,4 +1,4 @@
-# Agentic CADD & Drug Discovery Workflow Platform
+# Agentic CADD & Drug Discovery Workflow Platform.
 
 An AI-assisted **Computer-Aided Drug Design (CADD)** platform that orchestrates target discovery, multi-source compound retrieval, ADMET screening, protein–ligand scoring, interaction analysis, and compound comparison through a sequential end-to-end workflow.
 
