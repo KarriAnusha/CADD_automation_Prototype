@@ -1,9 +1,6 @@
-# Agentic CADD & Drug Discovery Workflow Platform.
+# Agentic CADD & Drug Discovery Workflow Platform
 
 An AI-assisted **Computer-Aided Drug Design (CADD)** platform that orchestrates target discovery, multi-source compound retrieval, ADMET screening, protein–ligand scoring, interaction analysis, and compound comparison through a sequential end-to-end workflow.
-
-🔗 **Live Application:** https://cadd.lovable.app
-
 ---
 
 ## Overview
@@ -373,6 +370,41 @@ Potential extensions include:
 - Reproducible scientific benchmarking
 
 ---
+
+## Getting Started
+
+### Prerequisites
+- **Node.js** (LTS recommended, e.g., Node 18+) and **npm**
+- A **Supabase** project (if using database persistence or edge functions)
+
+1. Clone and Install Dependencies
+```bash
+git clone [https://github.com/KarriAnusha/CADD_automation_Prototype.git](https://github.com/KarriAnusha/CADD_automation_Prototype.git)
+cd CADD_automation_Prototype
+npm install
+
+2. Configure Environment Variables
+Create a .env file in the project root with your Supabase credentials (check your existing .env.example or Supabase client configuration for exact variable names):
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+3. Run the Development Server
+npm run dev
+
+4. Build and Preview Production Bundle
+npm run build
+npm run preview
+
+##Other Useful Scripts
+npm run lint
+npm run build:dev
+
+### Quick Notes Before You Commit
+* **Environment variables:** Vite apps expose variables prefixed with `VITE_`. Confirm the exact `import.meta.env.VITE_*` names used in your Supabase client file so anyone cloning the repo sets the right keys.
+* **Backend / Edge Functions:** If someone runs the app locally against their own Supabase project rather than a hosted one, note any required database migrations or edge function environment secrets in your README too.
+
+<FollowUp label="Want me to draft a full, clean README.md for CADD_automation_Prototype?" query="Draft a complete, well-structured README.md for CADD_automation_Prototype including setup commands, pipeline stages, and environment configuration."/>
+
 
 ## ⚠️ Disclaimer
 
